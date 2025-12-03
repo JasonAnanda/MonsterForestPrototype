@@ -10,9 +10,6 @@ public class MonsterSpawner : MonoBehaviour
     public float minY = -4f;
     public float maxY = -2f;
 
-    [Header("Auto assign")]
-    public string deathLineName = "DeathLineInstance"; // name of the instance in scene
-
     private float timer;
 
     void Start() => ResetTimer();
@@ -41,24 +38,14 @@ public class MonsterSpawner : MonoBehaviour
 
         GameObject monster = Instantiate(prefab, spawnPos, Quaternion.identity);
 
-        // cari deathLine instance di scene
-        GameObject deathObj = GameObject.Find(deathLineName);
-        Transform deathT = (deathObj != null) ? deathObj.transform : null;
-
         MonsterSequence ms = monster.GetComponent<MonsterSequence>();
         if (ms != null)
         {
-            if (deathT != null)
-                ms.deathLine = deathT;
+            // movement bebas, bisa disesuaikan
+            ms.moveSpeed = Random.Range(0.8f, 1.2f);
 
-            // movement bebas, gak dikaitkan ke BPM
-            ms.moveSpeed = Random.Range(0.8f, 1.2f); // contoh bebas, bisa disesuaikan
-
-            // aktifkan sequence agar monster bersuara dan command berjalan
+            // aktifkan sequence
             ms.ActivateSequence();
-
-            // ⚠ tidak perlu lagi assign currentMonster manual
-            // PlayerInputHandler sekarang otomatis track semua monster via RegisterMonster()
         }
     }
 }

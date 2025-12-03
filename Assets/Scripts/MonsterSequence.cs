@@ -1,5 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -14,13 +13,15 @@ public class MonsterSequence : MonoBehaviour
     public float moveSpeed = 2f;
     public Vector3 moveDirection = Vector3.left;
     public Transform deathLine;
+    public int SequenceCount => sequence.Count;
 
     [Header("Sound")]
     public MonsterSoundPlayer soundPlayer;
     public AudioClip spawnClip;
 
+    // internal
     private List<string> sequence = new List<string>();
-    private List<CommandIconUI> icons = new List<CommandIconUI>();
+    private List<GameObject> icons = new List<GameObject>();
     private bool isActive = false;
     private float halfBeatTimer = 0f;
     private int nextSoundIndex = 0;
@@ -41,6 +42,7 @@ public class MonsterSequence : MonoBehaviour
 
         HandleMovement();
         HandleHalfBeatSound();
+        HandleInputUpdate();
     }
 
     public void ActivateSequence()
@@ -56,17 +58,6 @@ public class MonsterSequence : MonoBehaviour
 
         if (soundPlayer != null && spawnClip != null)
             soundPlayer.PlayCustomSound(spawnClip);
-
-        // assign ke PlayerInputHandler
-        StartCoroutine(AssignToPlayerInput());
-    }
-
-    IEnumerator AssignToPlayerInput()
-    {
-        yield return null; // tunggu 1 frame agar PlayerInputHandler aktif
-        var playerInput = FindObjectOfType<PlayerInputHandler>();
-        if (playerInput != null)
-            playerInput.activeMonster = this;
     }
 
     void HandleMovement()
@@ -101,6 +92,60 @@ public class MonsterSequence : MonoBehaviour
         }
     }
 
+    void HandleInputUpdate()
+    {
+        if (sequence.Count == 0) return;
+
+        // hanya cek A, S, J, K di InputManager
+        foreach (string cmd in new string[] { "A", "S", "J", "K" })
+        {
+            if (InputManager.Instance != null && InputManager.Instance.IsCommandPressed(cmd))
+            {
+                HandleInput(cmd);
+            }
+        }
+
+        // dot (・) hanya di-handle via space key
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            HandleInput("・");
+        }
+    }
+
+    void HandleInput(string pressed)
+    {
+        if (sequence.Count == 0) return;
+
+        string expected = sequence[0];
+        if (pressed == expected)
+        {
+            if (icons.Count > 0)
+            {
+                Destroy(icons[0]);
+                icons.RemoveAt(0);
+            }
+            sequence.RemoveAt(0);
+
+            if (pressed != "・" && soundPlayer != null)
+                soundPlayer.PlaySound(pressed);
+
+            if (sequence.Count == 0)
+                OnSequenceComplete();
+        }
+        else
+        {
+            Debug.Log("[MonsterSequence] Wrong input");
+            if (TrustMeterManager.Instance != null)
+                TrustMeterManager.Instance.AddMiss();
+        }
+    }
+
+    void OnSequenceComplete()
+    {
+        foreach (var ic in icons) Destroy(ic);
+        Destroy(gameObject);
+    }
+
     void CreateUI()
     {
         if (uiParent == null || iconPrefab == null) return;
@@ -125,52 +170,19 @@ public class MonsterSequence : MonoBehaviour
                 case "・": defaultSprite = spriteEmpty; break;
             }
 
-            CommandIconUI iconUI = iconGO.GetComponent<CommandIconUI>();
-            if (iconUI == null)
-                iconUI = iconGO.AddComponent<CommandIconUI>();
-
-            iconUI.defaultSprite = defaultSprite;
-            iconUI.emptySprite = spriteEmpty;
-
-            if (img != null) img.sprite = iconUI.defaultSprite;
-
-            icons.Add(iconUI);
+            if (img != null) img.sprite = defaultSprite;
+            icons.Add(iconGO);
         }
     }
 
-    public void HandlePlayerInput(string pressed)
+    void OnTriggerEnter2D(Collider2D other)
     {
-        if (!isActive) return;
-        if (sequence.Count == 0 || icons.Count == 0) return;
-
-        string expected = sequence[0];
-        CommandIconUI currentIcon = icons[0];
-
-        if (pressed == expected)
+        if (other.CompareTag("DeathLine"))
         {
-            currentIcon.SetPerfect();
-        }
-        else
-        {
-            currentIcon.SetMiss();
             if (TrustMeterManager.Instance != null)
                 TrustMeterManager.Instance.AddMiss();
+
+            Destroy(gameObject);
         }
-
-        sequence.RemoveAt(0);
-        icons.RemoveAt(0);
-
-        if (pressed != "・" && soundPlayer != null)
-            soundPlayer.PlaySound(pressed);
-
-        if (sequence.Count == 0)
-            OnSequenceComplete();
-    }
-
-    void OnSequenceComplete()
-    {
-        foreach (var ic in icons)
-            if (ic != null) Destroy(ic.gameObject);
-        Destroy(gameObject);
     }
 }
