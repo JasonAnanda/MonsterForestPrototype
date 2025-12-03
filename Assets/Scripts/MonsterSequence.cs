@@ -13,7 +13,6 @@ public class MonsterSequence : MonoBehaviour
     public float moveSpeed = 2f;
     public Vector3 moveDirection = Vector3.left;
     public Transform deathLine;
-    public int SequenceCount => sequence.Count;
 
     [Header("Sound")]
     public MonsterSoundPlayer soundPlayer;
@@ -23,9 +22,7 @@ public class MonsterSequence : MonoBehaviour
     private List<string> sequence = new List<string>();
     private List<GameObject> icons = new List<GameObject>();
     private bool isActive = false;
-    private float halfBeatTimer = 0f;
     private int nextSoundIndex = 0;
-    private float beatDuration = 0.5f;
 
     private readonly string[] commandPatterns = new string[]
     {
@@ -36,12 +33,21 @@ public class MonsterSequence : MonoBehaviour
         "A ・ ・ S ・ J"
     };
 
+    void OnEnable()
+    {
+        BeatManager.OnBeat += PlayNextCommand;
+    }
+
+    void OnDisable()
+    {
+        BeatManager.OnBeat -= PlayNextCommand;
+    }
+
     void Update()
     {
         if (!isActive) return;
 
         HandleMovement();
-        HandleHalfBeatSound();
         HandleInputUpdate();
     }
 
@@ -56,6 +62,7 @@ public class MonsterSequence : MonoBehaviour
 
         CreateUI();
 
+        // suara spawn
         if (soundPlayer != null && spawnClip != null)
             soundPlayer.PlayCustomSound(spawnClip);
     }
@@ -76,27 +83,22 @@ public class MonsterSequence : MonoBehaviour
         }
     }
 
-    void HandleHalfBeatSound()
+    void PlayNextCommand()
     {
-        halfBeatTimer += Time.deltaTime;
-        if (halfBeatTimer >= beatDuration / 2f)
-        {
-            if (nextSoundIndex < sequence.Count)
-            {
-                string cmd = sequence[nextSoundIndex];
-                if (cmd != "・" && soundPlayer != null)
-                    soundPlayer.PlaySound(cmd);
-                nextSoundIndex++;
-            }
-            halfBeatTimer = 0f;
-        }
+        if (nextSoundIndex >= sequence.Count) return;
+
+        string cmd = sequence[nextSoundIndex];
+        if (cmd != "・" && soundPlayer != null)
+            soundPlayer.PlaySound(cmd);
+
+        nextSoundIndex++;
     }
 
     void HandleInputUpdate()
     {
         if (sequence.Count == 0) return;
 
-        // hanya cek A, S, J, K di InputManager
+        // A, S, J, K
         foreach (string cmd in new string[] { "A", "S", "J", "K" })
         {
             if (InputManager.Instance != null && InputManager.Instance.IsCommandPressed(cmd))
@@ -105,7 +107,7 @@ public class MonsterSequence : MonoBehaviour
             }
         }
 
-        // dot (・) hanya di-handle via space key
+        // dot (・) via space
         if (Input.GetKeyDown(KeyCode.Space))
         {
             HandleInput("・");
