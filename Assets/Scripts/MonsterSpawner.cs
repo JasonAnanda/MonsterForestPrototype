@@ -5,8 +5,8 @@ public class MonsterSpawner : MonoBehaviour
     public GameObject[] monsterPrefabs;
     public Transform player;
     public float spawnDistance = 12f;
-    public float minSpawnTime = 6f;
-    public float maxSpawnTime = 8f;
+    public float minSpawnTime = 3f;
+    public float maxSpawnTime = 7f;
     public float minY = -4f;
     public float maxY = -2f;
 
@@ -41,10 +41,21 @@ public class MonsterSpawner : MonoBehaviour
         MonsterSequence ms = monster.GetComponent<MonsterSequence>();
         if (ms != null)
         {
-            // movement bebas, bisa disesuaikan
+            // movement normal tetap sama
             ms.moveSpeed = Random.Range(0.8f, 1.2f);
 
-            // aktifkan sequence
+            // -------------------------------------------
+            // PATCH: 10% chance menjadi irregular monster
+            // -------------------------------------------
+            if (Random.value < 0.10f)
+            {
+                ms.isIrregular = true;      // Flag irregular
+                ms.moveSpeed *= 1.4f;       // Sedikit lebih cepat
+                ms.irregularAmplitude = 0.3f;  // Zigzag kecil
+                ms.irregularFrequency = 3f;    // Kecepatan zigzag
+            }
+
+            // tetap aktifkan sequence seperti biasa
             ms.ActivateSequence();
         }
     }

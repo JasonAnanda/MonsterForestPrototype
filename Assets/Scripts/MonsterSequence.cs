@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -18,7 +19,30 @@ public class MonsterSequence : MonoBehaviour
     public MonsterSoundPlayer soundPlayer;
     public AudioClip spawnClip;
 
-    // internal
+    [Header("Irregular Movement")]
+    public bool isIrregular = false;
+    public float irregularAmplitude = 0.3f;
+    public float irregularFrequency = 3f;
+
+    [Header("Target Highlight")]
+    public GameObject highlightPrefab;
+    private GameObject highlightInstance;
+    private bool isTarget = false;
+    private bool flashState = false;
+
+    [Header("Highlight Components")]
+    public SpriteRenderer highlightRenderer;
+
+    [Header("Highlight Fade Settings")]
+    [Tooltip("Alpha value when idle (not just flashed).")]
+    public float baseAlpha = 0.3f;
+    [Tooltip("Alpha value when flash ON.")]
+    public float flashAlpha = 1f;
+    [Tooltip("Duration (seconds) of fade-out after a flash — keep small (e.g. 0.15).")]
+    public float fadeDuration = 0.15f;
+
+    private Coroutine highlightFadeCoroutine = null;
+
     private List<string> sequence = new List<string>();
     private List<GameObject> icons = new List<GameObject>();
     private bool isActive = false;
@@ -32,6 +56,36 @@ public class MonsterSequence : MonoBehaviour
         "A S ・ J ・ K",
         "A ・ ・ S ・ J"
     };
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    void Awake()
+    {
+        // Setup highlight prefab (instantiated child)
+        if (highlightPrefab != null)
+        {
+            highlightInstance = Instantiate(highlightPrefab, transform);
+            highlightInstance.transform.localPosition = Vector3.zero;
+            SetGameObjectAlpha(highlightInstance, baseAlpha);
+            highlightInstance.SetActive(false);
+        }
+
+        if (highlightRenderer != null)
+        {
+            SetSpriteAlpha(highlightRenderer, baseAlpha);
+            highlightRenderer.enabled = false;
+        }
+
+        if (TargetManager.Instance != null)
+            TargetManager.Instance.RegisterMonster(this);
+    }
+
+    void OnDestroy()
+    {
+        if (TargetManager.Instance != null)
+            TargetManager.Instance.DeregisterMonster(this);
+    }
 
     void OnEnable()
     {
@@ -51,6 +105,119 @@ public class MonsterSequence : MonoBehaviour
         HandleInputUpdate();
     }
 
+    // ============================================================
+    // TARGET FLAG VISUAL
+    // ============================================================
+    public void SetTarget(bool value)
+    {
+        isTarget = value;
+
+        if (highlightInstance != null)
+            highlightInstance.SetActive(value);
+
+        if (highlightRenderer != null)
+            highlightRenderer.enabled = value;
+
+        if (!value)
+            flashState = false;
+    }
+
+    void OnBeatFlash()
+    {
+        if (!isTarget) return;
+        if (highlightInstance == null) return;
+
+        flashState = !flashState;
+        highlightInstance.SetActive(flashState);
+    }
+
+    public void SetSelected(bool state)
+    {
+        if (highlightRenderer != null)
+            highlightRenderer.enabled = state;
+    }
+
+    // ============================================================
+    // FLASH HIGHLIGHT
+    // ============================================================
+    public void FlashHighlight()
+    {
+        if (!isTarget) return;
+
+        if (highlightInstance != null)
+            highlightInstance.SetActive(true);
+        if (highlightRenderer != null)
+            highlightRenderer.enabled = true;
+
+        ApplyAlphaToAll(flashAlpha);
+
+        if (highlightFadeCoroutine != null)
+            StopCoroutine(highlightFadeCoroutine);
+
+        // akses bpm via instance
+        float bpm = (BeatManager.Instance != null) ? BeatManager.Instance.bpm : 120f;
+        float halfBeat = (60f / Mathf.Max(0.0001f, bpm)) * 0.5f;
+        float fadeTime = Mathf.Clamp(fadeDuration, 0.05f, halfBeat * 0.9f);
+
+        highlightFadeCoroutine = StartCoroutine(FadeHighlightToBase(fadeTime));
+    }
+
+    IEnumerator FadeHighlightToBase(float duration)
+    {
+        float elapsed = 0f;
+        float startA = flashAlpha;
+        float endA = baseAlpha;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float a = Mathf.Lerp(startA, endA, t);
+            ApplyAlphaToAll(a);
+            yield return null;
+        }
+
+        ApplyAlphaToAll(endA);
+    }
+
+    void ApplyAlphaToAll(float a)
+    {
+        if (highlightRenderer != null)
+            SetSpriteAlpha(highlightRenderer, a);
+
+        if (highlightInstance != null)
+            SetGameObjectAlpha(highlightInstance, a);
+    }
+
+    void SetSpriteAlpha(SpriteRenderer sr, float a)
+    {
+        Color c = sr.color;
+        c.a = a;
+        sr.color = c;
+    }
+
+    void SetGameObjectAlpha(GameObject go, float a)
+    {
+        if (go == null) return;
+        SpriteRenderer sr = go.GetComponent<SpriteRenderer>();
+        if (sr != null) { SetSpriteAlpha(sr, a); return; }
+
+        SpriteRenderer childSr = go.GetComponentInChildren<SpriteRenderer>();
+        if (childSr != null) { SetSpriteAlpha(childSr, a); return; }
+    }
+
+    // ============================================================
+    // WRAPPERS UNTUK TARGETMANAGER & INPUT
+    // ============================================================
+    public void ReceivePlayerInput(string cmd) { HandleInput(cmd); }
+    public void HandleCommand(string cmd) { HandleInput(cmd); }
+    public void SetAutoTarget(bool state) { SetTarget(state); }
+    public void SetManualTarget(bool state) { SetTarget(state); }
+    public void SetTargetVisual(bool state) { SetTarget(state); }
+
+    // ============================================================
+    // ACTIVATE SEQUENCE
+    // ============================================================
     public void ActivateSequence()
     {
         if (isActive) return;
@@ -62,14 +229,27 @@ public class MonsterSequence : MonoBehaviour
 
         CreateUI();
 
-        // suara spawn
         if (soundPlayer != null && spawnClip != null)
             soundPlayer.PlayCustomSound(spawnClip);
     }
 
+    // ============================================================
+    // MOVEMENT
+    // ============================================================
     void HandleMovement()
     {
-        transform.position += moveDirection * moveSpeed * Time.deltaTime;
+        if (isIrregular)
+        {
+            Vector3 baseMove = moveDirection * moveSpeed * Time.deltaTime;
+            float offset = Mathf.Sin(Time.time * irregularFrequency) * irregularAmplitude;
+            Vector3 zigzag = new Vector3(0, offset * Time.deltaTime, 0);
+
+            transform.position += baseMove + zigzag;
+        }
+        else
+        {
+            transform.position += moveDirection * moveSpeed * Time.deltaTime;
+        }
 
         if (deathLine != null)
         {
@@ -78,11 +258,15 @@ public class MonsterSequence : MonoBehaviour
             {
                 if (TrustMeterManager.Instance != null)
                     TrustMeterManager.Instance.AddMiss();
+
                 Destroy(gameObject);
             }
         }
     }
 
+    // ============================================================
+    // COMMAND SOUND PER BEAT
+    // ============================================================
     void PlayNextCommand()
     {
         if (nextSoundIndex >= sequence.Count) return;
@@ -94,24 +278,22 @@ public class MonsterSequence : MonoBehaviour
         nextSoundIndex++;
     }
 
+    // ============================================================
+    // INPUT HANDLING
+    // ============================================================
     void HandleInputUpdate()
     {
+        if (!isTarget) return;
         if (sequence.Count == 0) return;
 
-        // A, S, J, K
         foreach (string cmd in new string[] { "A", "S", "J", "K" })
         {
             if (InputManager.Instance != null && InputManager.Instance.IsCommandPressed(cmd))
-            {
                 HandleInput(cmd);
-            }
         }
 
-        // dot (・) via space
         if (Input.GetKeyDown(KeyCode.Space))
-        {
             HandleInput("・");
-        }
     }
 
     void HandleInput(string pressed)
@@ -136,7 +318,6 @@ public class MonsterSequence : MonoBehaviour
         }
         else
         {
-            Debug.Log("[MonsterSequence] Wrong input");
             if (TrustMeterManager.Instance != null)
                 TrustMeterManager.Instance.AddMiss();
         }
@@ -144,7 +325,9 @@ public class MonsterSequence : MonoBehaviour
 
     void OnSequenceComplete()
     {
-        foreach (var ic in icons) Destroy(ic);
+        foreach (var ic in icons)
+            Destroy(ic);
+
         Destroy(gameObject);
     }
 
@@ -172,7 +355,9 @@ public class MonsterSequence : MonoBehaviour
                 case "・": defaultSprite = spriteEmpty; break;
             }
 
-            if (img != null) img.sprite = defaultSprite;
+            if (img != null)
+                img.sprite = defaultSprite;
+
             icons.Add(iconGO);
         }
     }

@@ -346,6 +346,11 @@ MonoBehaviour:
   deathLine: {fileID: 8178793432491285143, guid: a3ce1accb4469c34b8a2bb169142f35d, type: 3}
   soundPlayer: {fileID: 3291510834635108265}
   spawnClip: {fileID: 0}
+  isIrregular: 0
+  irregularAmplitude: 0.3
+  irregularFrequency: 3
+  highlightPrefab: {fileID: 5328915069382644205, guid: 37bb8c0e74f4bc7488157bd67011aa4a, type: 3}
+  highlightRenderer: {fileID: 0}
 --- !u!114 &3291510834635108265
 MonoBehaviour:
   m_ObjectHideFlags: 0

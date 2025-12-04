@@ -341,12 +341,16 @@ MonoBehaviour:
   spriteJ: {fileID: 21300000, guid: c920c7f885578f9488bebc1e56924226, type: 3}
   spriteK: {fileID: 21300000, guid: 75a4c1062fe8b094fb036fc3796072c6, type: 3}
   spriteEmpty: {fileID: 21300000, guid: 746ba042194bf7c429d4a9c46a170684, type: 3}
-  beatDuration: 1
   moveSpeed: 1
   moveDirection: {x: -1, y: 0, z: 0}
   deathLine: {fileID: 8178793432491285143, guid: a3ce1accb4469c34b8a2bb169142f35d, type: 3}
   soundPlayer: {fileID: 5548219252204950904}
   spawnClip: {fileID: 0}
+  isIrregular: 0
+  irregularAmplitude: 0.3
+  irregularFrequency: 3
+  highlightPrefab: {fileID: 5328915069382644205, guid: 37bb8c0e74f4bc7488157bd67011aa4a, type: 3}
+  highlightRenderer: {fileID: 0}
 --- !u!114 &5548219252204950904
 MonoBehaviour:
   m_ObjectHideFlags: 0
