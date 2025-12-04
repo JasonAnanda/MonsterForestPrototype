@@ -17,6 +17,10 @@ public class TargetManager : MonoBehaviour
     private readonly List<MonsterSequence> detectedMonsters = new();
     private readonly List<MonsterSequence> registeredMonsters = new();
 
+    // Manual override
+    private bool isManualOverride = false;
+    private int manualIndex = 0;
+
     void Awake()
     {
         if (Instance != null && Instance != this) Destroy(gameObject);
@@ -25,7 +29,6 @@ public class TargetManager : MonoBehaviour
 
     void OnEnable()
     {
-        // Flash setiap half-beat
         BeatManager.OnHalfBeat += HalfBeatFlash;
     }
 
@@ -37,14 +40,60 @@ public class TargetManager : MonoBehaviour
     void Update()
     {
         DetectMonsters();
+
+        HandleManualOverrideInput(); // <-- cek input manual dulu
         PickClosestMonster();
     }
 
-    // dipanggil saat half-beat
+    private void HandleManualOverrideInput()
+    {
+        if (detectedMonsters.Count == 0) return;
+
+        // Toggle manual override (optional, bisa diganti key)
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            isManualOverride = !isManualOverride;
+            manualIndex = 0; // reset
+        }
+
+        if (!isManualOverride) return;
+
+        // Forward/Backward
+        if (Input.GetKeyDown(KeyCode.E))
+        {
+            manualIndex++;
+            if (manualIndex >= detectedMonsters.Count) manualIndex = 0;
+        }
+        else if (Input.GetKeyDown(KeyCode.Q))
+        {
+            manualIndex--;
+            if (manualIndex < 0) manualIndex = detectedMonsters.Count - 1;
+        }
+
+        // Set target sesuai manualIndex
+        MonsterSequence target = detectedMonsters[manualIndex];
+        if (target != currentTarget)
+        {
+            if (currentTarget != null)
+            {
+                currentTarget.SetSelected(false);
+                currentTarget.SetTarget(false);
+            }
+
+            currentTarget = target;
+
+            if (currentTarget != null)
+            {
+                currentTarget.SetSelected(true);
+                currentTarget.SetTarget(true);
+            }
+        }
+    }
+
     private void HalfBeatFlash()
     {
         if (currentTarget != null)
-            currentTarget.FlashHighlight();   // pakai sistem fade + flash dari MonsterSequence
+            currentTarget.FlashHighlight();
     }
 
     void DetectMonsters()
@@ -75,6 +124,8 @@ public class TargetManager : MonoBehaviour
 
     void PickClosestMonster()
     {
+        if (isManualOverride) return; // jangan auto pick kalau override aktif
+
         if (detectedMonsters.Count == 0)
         {
             if (currentTarget != null)
@@ -114,10 +165,7 @@ public class TargetManager : MonoBehaviour
         }
     }
 
-    public MonsterSequence GetCurrentTarget()
-    {
-        return currentTarget;
-    }
+    public MonsterSequence GetCurrentTarget() => currentTarget;
 
     public void RegisterMonster(MonsterSequence m)
     {

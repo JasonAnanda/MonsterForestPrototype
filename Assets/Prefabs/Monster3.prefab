@@ -219,7 +219,7 @@ SpriteRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8448128570662851074}
-  m_Enabled: 0
+  m_Enabled: 1
   m_CastShadows: 0
   m_ReceiveShadows: 0
   m_DynamicOccludee: 1
@@ -351,6 +351,9 @@ MonoBehaviour:
   irregularFrequency: 3
   highlightPrefab: {fileID: 5328915069382644205, guid: 37bb8c0e74f4bc7488157bd67011aa4a, type: 3}
   highlightRenderer: {fileID: 0}
+  baseAlpha: 0.3
+  flashAlpha: 1
+  fadeDuration: 0.15
 --- !u!114 &-5697951776253929421
 MonoBehaviour:
   m_ObjectHideFlags: 0
