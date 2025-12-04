@@ -12,7 +12,6 @@ GameObject:
   - component: {fileID: 5763980199121583524}
   - component: {fileID: 3212886424474798281}
   - component: {fileID: 6882835548939774428}
-  - component: {fileID: 6640366618525486900}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -105,10 +104,6 @@ MonoBehaviour:
   clipS: {fileID: 8300000, guid: d48e68b5bcd7523448c5babea39710a8, type: 3}
   clipJ: {fileID: 8300000, guid: cd8cfcc7c1fa7864fb004ba3cb6afc1d, type: 3}
   clipK: {fileID: 8300000, guid: e200a67e95230d348bcdfb166a36f24e, type: 3}
-  clipKeyboardA: {fileID: 8300000, guid: c05a51ae116eedb449c870a2bea6664c, type: 3}
-  clipKeyboardS: {fileID: 8300000, guid: d48e68b5bcd7523448c5babea39710a8, type: 3}
-  clipKeyboardJ: {fileID: 8300000, guid: cd8cfcc7c1fa7864fb004ba3cb6afc1d, type: 3}
-  clipKeyboardK: {fileID: 8300000, guid: e200a67e95230d348bcdfb166a36f24e, type: 3}
 --- !u!82 &6882835548939774428
 AudioSource:
   m_ObjectHideFlags: 0
@@ -205,19 +200,6 @@ AudioSource:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
---- !u!114 &6640366618525486900
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1267530094393823480}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b41d740b36fe5b143ae26124cbd6017e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  soundPlayer: {fileID: 3212886424474798281}
 --- !u!1 &4414327678560333004
 GameObject:
   m_ObjectHideFlags: 0
