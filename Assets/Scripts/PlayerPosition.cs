@@ -2,26 +2,34 @@ using UnityEngine;
 
 public class PlayerPosition : MonoBehaviour
 {
+    // Instance Singleton diperlukan jika TargetManager memanggil fungsi SetPosition via Instance
+    public static PlayerPosition Instance { get; private set; }
+
     [Header("Fixed Position (can override in Inspector)")]
-    [Tooltip("Posisi tetap yang akan digunakan Player. Jika Vector3.zero, akan menggunakan posisi awal Scene.")]
+    [Tooltip("Posisi tetap yang akan digunakan Player.")]
     public Vector3 fixedPosition;
 
     void Awake()
     {
-        // 1. Ambil posisi awal di scene jika belum di-set di Inspector
-        if (fixedPosition == Vector3.zero)
+        // Implementasi Singleton
+        if (Instance != null && Instance != this)
         {
-            // PENTING: Gunakan posisi awal transform jika fixedPosition masih default (0,0,0)
-            fixedPosition = transform.position;
+            Destroy(gameObject);
+        }
+        else
+        {
+            Instance = this;
         }
 
-        // 2. Nonaktifkan skrip PlayerMovement supaya player tidak bisa digerakkan
-        // Ini memastikan tidak ada input yang memicu pergerakan bebas.
+        // === PERUBAHAN PENTING: MENGUNCI POSISI ===
+        // 1. Abaikan nilai Inspector. Paksa posisi menjadi yang diminta user.
+        fixedPosition = new Vector3(-7.5f, -3.22f, 0f);
+        // ==========================================
+
+        // Nonaktifkan skrip PlayerMovement supaya player tidak bisa digerakkan
         var movement = GetComponent<PlayerMovement>();
         if (movement != null)
             movement.enabled = false;
-
-        // Catatan: Jika PlayerMovement tidak ada, code ini aman.
     }
 
     void Start()
@@ -32,7 +40,7 @@ public class PlayerPosition : MonoBehaviour
 
     void Update()
     {
-        // 3. KUNCI PENTING: Setiap frame, paksa posisi Player kembali ke fixedPosition.
+        // KUNCI PENTING: Setiap frame, paksa posisi Player kembali ke fixedPosition.
         // Ini mengatasi potensi pergerakan akibat fisika (collider/rigidbody) atau skrip lain.
         if (transform.position != fixedPosition)
         {
@@ -40,11 +48,13 @@ public class PlayerPosition : MonoBehaviour
         }
     }
 
-    // Opsional: update posisi via skrip
+    /// <summary>
+    /// Dipanggil oleh TargetManager. Input posisi baru diabaikan,
+    /// Player tetap dikunci pada fixedPosition yang sudah ditetapkan.
+    /// </summary>
     public void SetPosition(Vector3 newPos)
     {
-        fixedPosition = newPos;
-        // Langsung terapkan posisi baru
+        // Kami mengabaikan newPos. Player tetap di fixedPosition yang hardcode.
         transform.position = fixedPosition;
     }
 }
