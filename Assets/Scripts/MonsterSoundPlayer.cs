@@ -58,4 +58,15 @@ public class MonsterSoundPlayer : MonoBehaviour
         if (clip != null && audioSource != null)
             audioSource.PlayOneShot(clip);
     }
+
+    /// <summary>
+    /// Menghentikan suara yang sedang dimainkan. Dipanggil saat target dilepas.
+    /// </summary>
+    public void StopCurrentSound()
+    {
+        if (audioSource != null && audioSource.isPlaying)
+        {
+            audioSource.Stop();
+        }
+    }
 }

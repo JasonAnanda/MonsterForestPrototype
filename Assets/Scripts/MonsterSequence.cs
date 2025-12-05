@@ -27,7 +27,9 @@ public class MonsterSequence : MonoBehaviour
     [Header("Target Highlight")]
     public GameObject highlightPrefab;
     private GameObject highlightInstance;
+
     private bool isTarget = false;
+
     private bool flashState = false;
 
     [Header("Highlight Components")]
@@ -62,7 +64,6 @@ public class MonsterSequence : MonoBehaviour
     // ============================================================
     void Awake()
     {
-        // Setup highlight prefab (instantiated child)
         if (highlightPrefab != null)
         {
             highlightInstance = Instantiate(highlightPrefab, transform);
@@ -119,7 +120,12 @@ public class MonsterSequence : MonoBehaviour
             highlightRenderer.enabled = value;
 
         if (!value)
+        {
             flashState = false;
+
+            if (soundPlayer != null)
+                soundPlayer.StopCurrentSound();
+        }
     }
 
     void OnBeatFlash()
@@ -154,7 +160,6 @@ public class MonsterSequence : MonoBehaviour
         if (highlightFadeCoroutine != null)
             StopCoroutine(highlightFadeCoroutine);
 
-        // akses bpm via instance
         float bpm = (BeatManager.Instance != null) ? BeatManager.Instance.bpm : 120f;
         float halfBeat = (60f / Mathf.Max(0.0001f, bpm)) * 0.5f;
         float fadeTime = Mathf.Clamp(fadeDuration, 0.05f, halfBeat * 0.9f);
@@ -269,11 +274,15 @@ public class MonsterSequence : MonoBehaviour
     // ============================================================
     void PlayNextCommand()
     {
+        if (!isTarget) return;
+
         if (nextSoundIndex >= sequence.Count) return;
 
         string cmd = sequence[nextSoundIndex];
         if (cmd != "・" && soundPlayer != null)
+        {
             soundPlayer.PlaySound(cmd);
+        }
 
         nextSoundIndex++;
     }
