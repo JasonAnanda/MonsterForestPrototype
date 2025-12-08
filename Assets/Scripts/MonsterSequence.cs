@@ -52,15 +52,34 @@ public class MonsterSequence : MonoBehaviour
     private int nextSoundIndex = 0;
     public bool waitingForBeat = false; // Waiting for 120 BPM quantization start
 
-    // --- POLA BARU (4-5 ketukan) ---
+    // --- POLA BARU (Variasi 2 hingga 6 ketukan, max 3 'A' rapid berturut-turut) ---
     private readonly string[] commandPatterns = new string[]
     {
-        // Pola 1 (5 ketukan): A - A - A (Diubah dari: "A", "-", "A", "-", "A", "-")
-        "A ・ A ・ A", 
-        // Pola 2 (4 ketukan): A - A A (Diubah dari: "A", "-", "-", "A", "A", "-")
+        // Panjang 2 ketukan (Max 2 A rapid)
+        "A A",
+        "A ・",
+
+        // Panjang 3 ketukan (Max 3 A rapid)
+        "A A A",
+        "A ・ A",
+        "・ A ・",
+
+        // Panjang 4 ketukan (Max 3 A rapid)
+        "A A A ・", // Mengganti AAAA, 3 rapid A di awal
         "A ・ A A",
-        // Pola 3 (5 ketukan): A A - A A (Diubah dari: "A", "A", "-", "A", "A", "-")
-        "A A ・ A A"
+        "A ・ ・ A",
+        "・ A A ・", 
+        
+        // Panjang 5 ketukan (Max 3 A rapid)
+        "A A A ・ A", // Mengganti AAAAA, 3 rapid A diselingi jeda
+        "A ・ A ・ A",
+        "A A ・ A A",
+        "A ・ ・ ・ A", 
+        
+        // Panjang 6 ketukan (Max 3 A rapid)
+        "A A A ・ A A", // Mengganti AAAAAA, 3 rapid A di awal, diselingi jeda
+        "A ・ A ・ A ・",
+        "A A ・ ・ A A"
     };
 
     // ============================================================
@@ -284,8 +303,28 @@ public class MonsterSequence : MonoBehaviour
             }
         }
 
-        // RunNextCommandStep dilanggan ke BeatManager.OnSystemBeat (240 BPM),
-        // sehingga memajukan nextSoundIndex (240 BPM) setiap kali dipanggil.
+        // --- LOGIC BARU: Konsumsi PAUSE ('・') secara OTOMATIS pada beat tick ---
+        // Jika command pertama yang diharapkan adalah PAUSE ('・'), konsumsi dan lanjutkan.
+        if (sequence.Count > 0 && sequence[0] == "・")
+        {
+            // Hapus command PAUSE ('・') dari daftar yang diharapkan
+            if (icons.Count > 0)
+            {
+                Destroy(icons[0]);
+                icons.RemoveAt(0);
+            }
+            sequence.RemoveAt(0);
+
+            // Jika ini adalah langkah terakhir, selesai.
+            if (sequence.Count == 0)
+            {
+                OnSequenceComplete();
+                return;
+            }
+        }
+        // --- END LOGIC BARU ---
+
+        // RunNextCommandStep dilanggan ke BeatManager.OnSystemBeat (240 BPM).
 
         if (nextSoundIndex >= sequence.Count)
         {
@@ -312,8 +351,10 @@ public class MonsterSequence : MonoBehaviour
         if (!isTarget) return;
         if (sequence.Count == 0) return;
 
-        // FIX BUG 2: Ensure the loop checks for all commands, including '・' (Pause/Space)
-        foreach (string cmd in new string[] { "A", "S", "J", "K", "・" })
+        // Cek hanya untuk tombol input yang valid (A, S, J, K). 
+        // Tombol '・' (Pause/Space) tidak lagi memerlukan input.
+        // Perubahan: Hapus "・" dari array yang dicek.
+        foreach (string cmd in new string[] { "A", "S", "J", "K" })
         {
             // Check GetKeyDown from InputManager
             if (InputManager.Instance != null && InputManager.Instance.IsCommandPressed(cmd))
@@ -338,6 +379,18 @@ public class MonsterSequence : MonoBehaviour
 
         string expected = sequence[0];
 
+        // --- LOGIC BARU: Player input saat harus menunggu PAUSE ('・') ---
+        if (expected == "・")
+        {
+            // Player menekan tombol saat seharusnya menunggu (Miss)
+            if (TrustMeterManager.Instance != null)
+                TrustMeterManager.Instance.AddMiss();
+
+            TargetManager.Instance?.SetManualTarget(null); // Reset target
+            return; // Jangan hapus '・', biarkan RunNextCommandStep yang menghapusnya di beat berikutnya
+        }
+        // --- END LOGIC BARU ---
+
         // Check Timing Window from BeatManager
         bool isInputWindowOpen = BeatManager.Instance != null && BeatManager.Instance.isInputWindowOpen;
 
@@ -358,7 +411,7 @@ public class MonsterSequence : MonoBehaviour
             sequence.RemoveAt(0);
 
             // Play feedback sound
-            if (pressed != "・" && soundPlayer != null)
+            if (pressed != "・" && soundPlayer != null) // '・' tidak pernah dicapai di sini
                 soundPlayer.PlaySound(pressed);
 
             if (sequence.Count == 0)

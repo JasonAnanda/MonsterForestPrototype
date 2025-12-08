@@ -698,7 +698,7 @@ AudioSource:
   m_PlayOnAwake: 1
   m_Volume: 1
   m_Pitch: 1
-  Loop: 0
+  Loop: 1
   Mute: 0
   Spatialize: 0
   SpatializePostEffects: 0
@@ -792,8 +792,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0ffe7cf1033f1754689497d8665c9cba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  bpm: 120
-  beatAudio: {fileID: 646402246}
+  mainBPM: 120
+  audioOffset: 0
+  inputWindowTolerance: 0.08
+  isInputWindowOpen: 0
+  bgmAudioSource: {fileID: 646402246}
+  bgmClip: {fileID: 0}
 --- !u!4 &646402248
 Transform:
   m_ObjectHideFlags: 0
@@ -985,7 +989,6 @@ MonoBehaviour:
   monsterLayer:
     serializedVersion: 2
     m_Bits: 0
-  bpm: 120
 --- !u!4 &1295815192
 Transform:
   m_ObjectHideFlags: 0
