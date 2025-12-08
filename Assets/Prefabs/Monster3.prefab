@@ -340,7 +340,7 @@ MonoBehaviour:
   spriteS: {fileID: 21300000, guid: 7e6cec49d545839428a00d1c567a586a, type: 3}
   spriteJ: {fileID: 21300000, guid: c920c7f885578f9488bebc1e56924226, type: 3}
   spriteK: {fileID: 21300000, guid: 75a4c1062fe8b094fb036fc3796072c6, type: 3}
-  spriteEmpty: {fileID: 21300000, guid: 746ba042194bf7c429d4a9c46a170684, type: 3}
+  spriteEmpty: {fileID: 21300000, guid: 3dc06a8ddb248d24c964d4617c4ba7cd, type: 3}
   moveSpeed: 1
   moveDirection: {x: -1, y: 0, z: 0}
   deathLine: {fileID: 8178793432491285143, guid: a3ce1accb4469c34b8a2bb169142f35d, type: 3}
@@ -354,6 +354,7 @@ MonoBehaviour:
   baseAlpha: 0.3
   flashAlpha: 1
   fadeDuration: 0.15
+  waitingForBeat: 0
 --- !u!114 &-5697951776253929421
 MonoBehaviour:
   m_ObjectHideFlags: 0

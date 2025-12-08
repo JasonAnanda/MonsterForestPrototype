@@ -1,81 +1,111 @@
-using UnityEngine;
 using System;
+using UnityEngine;
 
 public class BeatManager : MonoBehaviour
 {
     public static BeatManager Instance;
 
-    // BPM Sistem Ditingkatkan ke 240 (High-Resolution Grid)
-    [Header("Rhythm Core Settings")]
-    public float systemBPM = 240f;
-    [Tooltip("Ketukan Utama Game, biasanya 120 BPM (Setengah dari System BPM)")]
+    // --- Events untuk Sinkronisasi ---
+    // Ditembakkan setiap beat System (240 BPM)
+    public static event Action<int> OnSystemBeat;
+    // Ditembakkan setiap Main Pulse (120 BPM)
+    public static event Action OnMainPulse;
+
+    [Header("BPM & Timing")]
+    [Tooltip("BPM utama lagu (biasanya 120).")]
     public float mainBPM = 120f;
+    [Tooltip("Offset dalam detik untuk mengkalibrasi waktu lagu.")]
+    public float audioOffset = 0f;
 
-    private float beatInterval; // Interval 240 BPM
-    private float nextBeatTime; // Waktu tepat beat berikutnya
-    private int systemBeatCounter = 0; // Menghitung beat 240 BPM (0 = Main Beat 120 BPM)
+    [Header("Input Timing Window")]
+    [Tooltip("Jendela waktu (dalam detik) di sekitar beat 120 BPM di mana input dianggap sempurna.")]
+    public float inputWindowTolerance = 0.08f; // Toleransi lebih kecil, 80ms
+    [HideInInspector]
+    public bool isInputWindowOpen = false;
 
-    // Events Baru (Menggantikan OnBeat lama)
-    public static event Action<int> OnSystemBeat; // Ditembakkan setiap 240 BPM (int: 240 atau 120)
-    public static event Action OnMainPulse; // Ditembakkan setiap 120 BPM (Main Beat)
+    [Header("Audio")]
+    public AudioSource bgmAudioSource;
+    public AudioClip bgmClip;
 
-    // Variabel untuk pemeriksaan ketepatan waktu Input
-    [HideInInspector] public bool isInputWindowOpen = false;
+    // --- Private Timing Variables ---
+    private float systemBeatInterval; // Interval 240 BPM
+    private float mainPulseInterval;  // Interval 120 BPM
+    private double nextSystemBeatTime;
+    private double nextMainPulseTime;
+    private int systemBeatCounter = 0; // Menghitung 240 BPM (0 = Main Pulse 120 BPM)
 
-    // --- Initialization ---
     void Awake()
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
+        if (Instance != null && Instance != this) Destroy(gameObject);
         Instance = this;
 
-        // Interval dihitung berdasarkan 240 BPM
-        beatInterval = 60f / Mathf.Max(0.0001f, systemBPM);
+        // Interval dihitung berdasarkan 240 BPM dan 120 BPM
+        systemBeatInterval = 60f / (mainBPM * 2f); // 240 BPM interval
+        mainPulseInterval = 60f / mainBPM;         // 120 BPM interval
 
-        // Start beat time (menggunakan Time.time untuk presisi)
-        nextBeatTime = Time.time + beatInterval;
-
-        Debug.Log($"[BeatManager] System Grid: {systemBPM} BPM | Main Pulse: {mainBPM} BPM.");
+        if (bgmAudioSource == null)
+        {
+            Debug.LogError("BeatManager membutuhkan AudioSource untuk BGM.");
+        }
     }
 
-    // --- Main Loop ---
+    void Start()
+    {
+        if (bgmAudioSource != null && bgmClip != null)
+        {
+            bgmAudioSource.clip = bgmClip;
+            // *PENTING*: Pastikan properti .loop dicentang di Inspector untuk BGM Audio Source Anda.
+            bgmAudioSource.Play();
+
+            // Inisialisasi waktu beat pertama menggunakan waktu audio
+            nextSystemBeatTime = AudioSettings.dspTime + audioOffset;
+            nextMainPulseTime = nextSystemBeatTime; // Main Pulse terjadi pada beat pertama
+        }
+    }
+
     void Update()
     {
-        // Cek jika sudah waktunya beat
-        if (Time.time >= nextBeatTime)
+        // š KRITIKAL: Menggunakan AudioSettings.dspTime untuk sinkronisasi yang presisi
+        double currentTime = AudioSettings.dspTime;
+
+        // 1. Cek System Beat (240 BPM)
+        if (currentTime >= nextSystemBeatTime)
         {
-            // --- FIRE BEAT ---
-            // Koreksi waktu untuk mencegah drift
-            nextBeatTime += beatInterval;
+            // Koreksi waktu untuk mencegah drift (tambahan beat berikutnya)
+            nextSystemBeatTime += systemBeatInterval;
 
-            // Reset Input Window
-            isInputWindowOpen = true;
-
-            // Update Counter (0, 1, 0, 1, ...)
+            // Update Counter (0 -> 1 -> 0 -> 1...)
             systemBeatCounter = (systemBeatCounter + 1) % 2;
+            int rhythmType = (systemBeatCounter == 0) ? (int)mainBPM : (int)(mainBPM * 2f);
 
-            int rhythmType = (systemBeatCounter == 0) ? (int)mainBPM : (int)systemBPM;
-
-            // 1. Event 240 BPM (Untuk Monster Voice Sequence)
+            // Panggil event 240 BPM (untuk Monster Voice Sequencing)
             OnSystemBeat?.Invoke(rhythmType);
 
-            // 2. Event 120 BPM (Untuk Kuantisasi & Flash Visual)
+            // 2. Cek Main Pulse (120 BPM) - Hanya terjadi jika counter = 0
             if (systemBeatCounter == 0)
             {
+                // Panggil event 120 BPM (Untuk Kuantisasi & Flash Visual)
                 OnMainPulse?.Invoke();
-            }
 
-            // (TODO: Pindahkan beatAudio.Play() di sini jika Anda ingin metronom 120 BPM)
+                // Hitung waktu pulse utama berikutnya (digunakan untuk Input Timing Window)
+                nextMainPulseTime = nextSystemBeatTime;
+            }
+        }
+
+        // 3. Input Timing Window (Jendela Perfect Hit)
+        // Cek apakah waktu saat ini dekat dengan beat 120 BPM (Main Pulse)
+        // Kita bandingkan dengan waktu Main Pulse berikutnya (nextMainPulseTime) dan yang terakhir (timeSinceLastPulse)
+        double timeUntilNextPulse = nextMainPulseTime - currentTime;
+        double timeSinceLastPulse = currentTime - (nextSystemBeatTime - mainPulseInterval);
+
+        // Input dianggap sempurna jika berada dalam toleransi di kedua sisi beat 120 BPM
+        if (timeUntilNextPulse <= inputWindowTolerance || (timeSinceLastPulse > 0 && timeSinceLastPulse <= inputWindowTolerance))
+        {
+            isInputWindowOpen = true;
         }
         else
         {
-            // Jendela input hanya terbuka pada saat beat
             isInputWindowOpen = false;
         }
     }
-
-    // --- Hapus semua Event lama (OnHalfBeat, OnBeat, OnLateBeat) jika ada ---
 }
