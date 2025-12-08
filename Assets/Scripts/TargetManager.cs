@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
-using System.Linq; // Perlu ditambahkan untuk fungsi List
+using System.Linq;
 
 public class TargetManager : MonoBehaviour
 {
@@ -9,9 +9,6 @@ public class TargetManager : MonoBehaviour
     [Header("Detection Settings")]
     public float detectionRadius = 15f;
     public LayerMask monsterLayer;
-
-    [Header("Flash Settings")]
-    public float bpm = 120f;
 
     private MonsterSequence currentTarget;
 
@@ -32,12 +29,24 @@ public class TargetManager : MonoBehaviour
 
     void OnEnable()
     {
-        BeatManager.OnHalfBeat += HalfBeatFlash;
+        // ★ PERUBAHAN: Dengarkan Main Pulse (120 BPM) untuk visual flash
+        BeatManager.OnMainPulse += MainPulseFlash;
     }
 
     void OnDisable()
     {
-        BeatManager.OnHalfBeat -= HalfBeatFlash;
+        // ★ PERUBAHAN: Hapus langganan
+        BeatManager.OnMainPulse -= MainPulseFlash;
+    }
+
+    /// <summary>
+    /// Handler untuk event Main Pulse (120 BPM). Menggantikan HalfBeatFlash.
+    /// </summary>
+    private void MainPulseFlash()
+    {
+        // Flash Highlight harus sinkron dengan Main Pulse 120 BPM
+        if (currentTarget != null)
+            currentTarget.FlashHighlight();
     }
 
     void Update()
@@ -45,15 +54,12 @@ public class TargetManager : MonoBehaviour
         // 1. Deteksi monster di radius (Logika ini tetap aman)
         DetectMonsters();
 
-        // 2. Handle input Q/E untuk manual targeting (menggantikan HandleManualOverrideInput)
+        // 2. Handle input Q/E untuk manual targeting
         HandleTargetCyclingInput();
-
-        // --- PENTING: HAPUS PickClosestMonster() DI SINI ---
     }
 
     /// <summary>
     /// Menangani input Q/E untuk berpindah target secara manual.
-    /// Ini menggantikan logika HandleManualOverrideInput().
     /// </summary>
     private void HandleTargetCyclingInput()
     {
@@ -112,7 +118,6 @@ public class TargetManager : MonoBehaviour
 
     /// <summary>
     /// Fungsi inti yang digunakan untuk menetapkan target baru.
-    /// Ini menggantikan logika setting target di PickClosestMonster() dan HandleManualOverrideInput().
     /// </summary>
     /// <param name="target">MonsterSequence yang dipilih sebagai target. Null untuk mereset.</param>
     public void SetManualTarget(MonsterSequence target)
@@ -122,7 +127,6 @@ public class TargetManager : MonoBehaviour
         // 1. Nonaktifkan status target pada monster yang lama (jika ada)
         if (currentTarget != null)
         {
-            // PENTING: Panggil fungsi yang sama seperti di PickClosestMonster
             currentTarget.SetSelected(false);
             currentTarget.SetTarget(false);
         }
@@ -133,9 +137,8 @@ public class TargetManager : MonoBehaviour
         // 3. Aktifkan status target pada monster yang baru (jika tidak null)
         if (currentTarget != null)
         {
-            // PENTING: Panggil fungsi yang sama seperti di PickClosestMonster
             currentTarget.SetSelected(true);
-            currentTarget.SetTarget(true);
+            currentTarget.SetTarget(true); // <--- Monster sekarang menunggu kuantisasi di sini
 
             // Update index untuk cycling, hanya jika target ini ada di daftar detectedMonsters
             currentTargetIndex = detectedMonsters.IndexOf(target);
@@ -147,12 +150,6 @@ public class TargetManager : MonoBehaviour
     }
 
     // --- FUNGSI LAIN DIBIARKAN SAMA ---
-
-    private void HalfBeatFlash()
-    {
-        if (currentTarget != null)
-            currentTarget.FlashHighlight();
-    }
 
     void DetectMonsters()
     {
@@ -181,15 +178,6 @@ public class TargetManager : MonoBehaviour
         }
     }
 
-    // --- PENTING: HAPUS FUNGSI PickClosestMonster() SEPENUHNYA ---
-    // Pastikan fungsi ini DIBUANG dari skrip:
-    /*
-    void PickClosestMonster()
-    {
-        // ... (kode auto-pick)
-    }
-    */
-
     // --- FUNGSI HELPER LAIN DIBIARKAN SAMA ---
 
     public MonsterSequence GetCurrentTarget() => currentTarget;
@@ -210,10 +198,6 @@ public class TargetManager : MonoBehaviour
 
         if (currentTarget == m)
         {
-            // Ganti ini
-            // currentTarget.SetSelected(false);
-            // currentTarget = null;
-
             // Dengan ini (lebih clean)
             SetManualTarget(null);
         }
@@ -223,6 +207,7 @@ public class TargetManager : MonoBehaviour
 
     public void ForwardInput(string cmd)
     {
+        // Fungsi ini dipertahankan hanya jika ada skrip lama (misalnya InputRouter) yang masih memanggilnya.
         if (currentTarget == null) return;
         currentTarget.ReceivePlayerInput(cmd);
     }

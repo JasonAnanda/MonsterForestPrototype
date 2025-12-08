@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using System.Linq;
 
 public class MonsterSequence : MonoBehaviour
 {
@@ -29,7 +30,6 @@ public class MonsterSequence : MonoBehaviour
     private GameObject highlightInstance;
 
     private bool isTarget = false;
-
     private bool flashState = false;
 
     [Header("Highlight Components")]
@@ -45,18 +45,24 @@ public class MonsterSequence : MonoBehaviour
 
     private Coroutine highlightFadeCoroutine = null;
 
+    // Sequence asli monster (untuk dimainkan oleh monster)
     private List<string> sequence = new List<string>();
+    // Icons untuk diproses oleh pemain (berkurang seiring input benar)
     private List<GameObject> icons = new List<GameObject>();
     private bool isActive = false;
+
+    // --- SEQUENCE STATE BARU (PENTING UNTUK RITME) ---
+    // Index untuk memutar suara command monster (240 BPM)
     private int nextSoundIndex = 0;
+    // Flag Kuantisasi: True jika monster baru saja jadi target dan menunggu Main Pulse (120 BPM)
+    public bool waitingForBeat = false;
 
     private readonly string[] commandPatterns = new string[]
     {
-        "A S J ・ ・ K",
-        "A ・ S ・ J ・",
-        "・ A S ・ J K",
-        "A S ・ J ・ K",
-        "A ・ ・ S ・ J"
+        // Pola baru yang menggunakan tombol 'A' dan jeda '・' (6 langkah per pola)
+        "A ・ A ・ A ・",
+        "A ・ ・ A A ・",
+        "A A ・ A A ・"
     };
 
     // ============================================================
@@ -90,12 +96,14 @@ public class MonsterSequence : MonoBehaviour
 
     void OnEnable()
     {
-        BeatManager.OnBeat += PlayNextCommand;
+        // ★ PERUBAHAN: Dengarkan Event OnSystemBeat (240 BPM) untuk menjalankan urutan suara
+        BeatManager.OnSystemBeat += RunNextCommandStep;
     }
 
     void OnDisable()
     {
-        BeatManager.OnBeat -= PlayNextCommand;
+        // ★ PERUBAHAN: Hapus langganan
+        BeatManager.OnSystemBeat -= RunNextCommandStep;
     }
 
     void Update()
@@ -107,11 +115,18 @@ public class MonsterSequence : MonoBehaviour
     }
 
     // ============================================================
-    // TARGET FLAG VISUAL
+    // TARGET FLAG VISUAL & KUANTISASI
     // ============================================================
     public void SetTarget(bool value)
     {
         isTarget = value;
+
+        if (value)
+        {
+            // ★ Kuantisasi: Saat menjadi target, atur flag untuk menunggu Main Pulse
+            waitingForBeat = true;
+            nextSoundIndex = 0; // Pastikan sequence suara mulai dari awal
+        }
 
         if (highlightInstance != null)
             highlightInstance.SetActive(value);
@@ -122,6 +137,7 @@ public class MonsterSequence : MonoBehaviour
         if (!value)
         {
             flashState = false;
+            waitingForBeat = false; // Hentikan kuantisasi
 
             if (soundPlayer != null)
                 soundPlayer.StopCurrentSound();
@@ -160,9 +176,11 @@ public class MonsterSequence : MonoBehaviour
         if (highlightFadeCoroutine != null)
             StopCoroutine(highlightFadeCoroutine);
 
-        float bpm = (BeatManager.Instance != null) ? BeatManager.Instance.bpm : 120f;
-        float halfBeat = (60f / Mathf.Max(0.0001f, bpm)) * 0.5f;
-        float fadeTime = Mathf.Clamp(fadeDuration, 0.05f, halfBeat * 0.9f);
+        // Hitung durasi fade berdasarkan BPM saat ini (Main Pulse, biasanya 120 BPM)
+        float bpm = (BeatManager.Instance != null) ? BeatManager.Instance.mainBPM : 120f;
+        float beatInterval = 60f / Mathf.Max(0.0001f, bpm);
+        // Pastikan fade time tidak lebih lama dari Main Pulse (120 BPM)
+        float fadeTime = Mathf.Clamp(fadeDuration, 0.05f, beatInterval * 0.9f);
 
         highlightFadeCoroutine = StartCoroutine(FadeHighlightToBase(fadeTime));
     }
@@ -230,7 +248,8 @@ public class MonsterSequence : MonoBehaviour
 
         string pattern = commandPatterns[Random.Range(0, commandPatterns.Length)];
         sequence.Clear();
-        sequence.AddRange(pattern.Split(' '));
+        // ★ PERUBAHAN: Pastikan membagi string dan menghilangkan entri kosong
+        sequence.AddRange(pattern.Split(' ').Where(s => !string.IsNullOrEmpty(s)));
 
         CreateUI();
 
@@ -270,15 +289,43 @@ public class MonsterSequence : MonoBehaviour
     }
 
     // ============================================================
-    // COMMAND SOUND PER BEAT
+    // COMMAND SOUND PER BEAT (Sequence 240 BPM)
     // ============================================================
-    void PlayNextCommand()
+    // ★ PERUBAHAN: Menggantikan PlayNextCommand() yang lama
+    void RunNextCommandStep(int rhythmType)
     {
+        // Jika monster bukan target, abaikan
         if (!isTarget) return;
 
-        if (nextSoundIndex >= sequence.Count) return;
+        // 1. Logika Kuantisasi (Menunggu Main Pulse/120 BPM untuk start)
+        // Kita hanya mulai bermain sequence saat Main Pulse (120 BPM) DITANGANI.
+
+        // Cek apakah sedang menunggu (waitingForBeat).
+        if (waitingForBeat)
+        {
+            // Cek apakah ini adalah Main Pulse (120 BPM) untuk mengakhiri kuantisasi.
+            if (BeatManager.Instance != null && rhythmType == (int)BeatManager.Instance.mainBPM)
+            {
+                // Main Pulse tercapai, kuantisasi selesai, monster mulai bicara pada beat ini.
+                waitingForBeat = false;
+            }
+            else
+            {
+                // Masih menunggu, abaikan command step ini.
+                return;
+            }
+        }
+
+        // 2. Jalankan sequence jika sudah tidak kuantisasi
+        if (nextSoundIndex >= sequence.Count)
+        {
+            // Monster telah selesai memainkan polanya, kini menunggu input pemain.
+            return;
+        }
 
         string cmd = sequence[nextSoundIndex];
+
+        // Putar suara jika bukan jeda
         if (cmd != "・" && soundPlayer != null)
         {
             soundPlayer.PlaySound(cmd);
@@ -295,12 +342,22 @@ public class MonsterSequence : MonoBehaviour
         if (!isTarget) return;
         if (sequence.Count == 0) return;
 
+        // ★ PENTING: Cek apakah Input Manager berada di Jendela Waktu yang valid
+        if (BeatManager.Instance != null && !BeatManager.Instance.isInputWindowOpen)
+        {
+            // Tidak dalam jendela input, jangan proses input tombol untuk Echo.
+            return;
+        }
+
+        // Proses input hanya jika jendela input terbuka
         foreach (string cmd in new string[] { "A", "S", "J", "K" })
         {
+            // Asumsi InputManager.IsCommandPressed() mendeteksi GetKeyDown (ini sudah benar)
             if (InputManager.Instance != null && InputManager.Instance.IsCommandPressed(cmd))
                 HandleInput(cmd);
         }
 
+        // Input untuk Jeda/Kosong (・)
         if (Input.GetKeyDown(KeyCode.Space))
             HandleInput("・");
     }
@@ -309,9 +366,23 @@ public class MonsterSequence : MonoBehaviour
     {
         if (sequence.Count == 0) return;
 
+        // ★ PERUBAHAN PENTING: Abaikan/Penalti input jika monster sedang kuantisasi
+        if (waitingForBeat)
+        {
+            // Pemain mencoba input sebelum monster mulai bicara (miss).
+            if (TrustMeterManager.Instance != null)
+                TrustMeterManager.Instance.AddMiss();
+
+            // Setelah miss, batalkan targeting (tergantung aturan game Anda, ini bisa opsional)
+            TargetManager.Instance?.SetManualTarget(null);
+
+            return;
+        }
+
         string expected = sequence[0];
         if (pressed == expected)
         {
+            // Input Benar: Hapus icon dan sequence pertama
             if (icons.Count > 0)
             {
                 Destroy(icons[0]);
@@ -319,6 +390,7 @@ public class MonsterSequence : MonoBehaviour
             }
             sequence.RemoveAt(0);
 
+            // Play feedback sound
             if (pressed != "・" && soundPlayer != null)
                 soundPlayer.PlaySound(pressed);
 
@@ -327,13 +399,18 @@ public class MonsterSequence : MonoBehaviour
         }
         else
         {
+            // Input Salah (miss)
             if (TrustMeterManager.Instance != null)
                 TrustMeterManager.Instance.AddMiss();
+
+            // Setelah miss, batalkan targeting (opsional, tergantung aturan game)
+            TargetManager.Instance?.SetManualTarget(null);
         }
     }
 
     void OnSequenceComplete()
     {
+        // Hapus sisa icon (jika ada) dan monster
         foreach (var ic in icons)
             Destroy(ic);
 
@@ -344,11 +421,13 @@ public class MonsterSequence : MonoBehaviour
     {
         if (uiParent == null || iconPrefab == null) return;
 
+        // Bersihkan UI lama
         for (int i = uiParent.childCount - 1; i >= 0; i--)
             Destroy(uiParent.GetChild(i).gameObject);
 
         icons.Clear();
 
+        // Buat icon baru
         foreach (string cmd in sequence)
         {
             GameObject iconGO = Instantiate(iconPrefab, uiParent);
