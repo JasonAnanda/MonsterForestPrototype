@@ -33,7 +33,7 @@ public class MonsterSequence : MonoBehaviour
     public SpriteRenderer highlightRenderer;
 
     [Header("Highlight Fade Settings")]
-    public float baseAlpha = 0.3f;
+    public float baseAlpha = 0.15f;
     public float flashAlpha = 1f;
     public float fadeDuration = 0.15f;
 
