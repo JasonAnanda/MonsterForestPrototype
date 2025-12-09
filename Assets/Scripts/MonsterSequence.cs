@@ -19,6 +19,8 @@ public class MonsterSequence : MonoBehaviour
     [Header("Sound")]
     public MonsterSoundPlayer soundPlayer;
     public AudioClip spawnClip;
+    public AudioClip cueSoundClip; // <--- SUARA CUE "GO!" UNTUK MEMULAI TURN PLAYER
+    public AudioClip hitFeedbackClip; // <--- NEW: SUARA FEEDBACK JIKA PLAYER BERHASIL INPUT
 
     [Header("Irregular Movement")]
     public bool isIrregular = false;
@@ -39,7 +41,6 @@ public class MonsterSequence : MonoBehaviour
 
     // --- STATE ---
     private bool isTarget = false;
-    private bool flashState = false;
     private Coroutine highlightFadeCoroutine = null;
 
     // Command sequence for the player (reduces with correct input)
@@ -48,38 +49,30 @@ public class MonsterSequence : MonoBehaviour
     private List<GameObject> icons = new List<GameObject>();
     private bool isActive = false;
 
-    // --- SEQUENCE STATE FOR RHYTHM ---
-    private int nextSoundIndex = 0;
+    // --- SEQUENCE STATE FOR RHYTHM (REVISED) ---
     public bool waitingForBeat = false; // Waiting for 120 BPM quantization start
+    private bool hasCued = false; // Melacak apakah suara Cue sudah dimainkan
 
-    // --- POLA BARU (Variasi 2 hingga 6 ketukan, max 3 'A' rapid berturut-turut) ---
+    // Index untuk melacak beat saat fase prompting/echo monster
+    private int currentBeatIndex = 0;
+    // Flag untuk memisahkan giliran monster (prompt) dan giliran player (input)
+    private bool isPromptingPhase = true;
+
+    // VARIABEL waitingForCueDelay DIHAPUS UNTUK MEMPERCEPAT CUE
+
+    // --- POLA (Variasi 2 hingga 6 ketukan, max 3 'A' rapid berturut-turut) ---
     private readonly string[] commandPatterns = new string[]
     {
-        // Panjang 2 ketukan (Max 2 A rapid)
-        "A A",
-        "A ・",
-
-        // Panjang 3 ketukan (Max 3 A rapid)
-        "A A A",
-        "A ・ A",
-        "・ A ・",
-
-        // Panjang 4 ketukan (Max 3 A rapid)
-        "A A A ・", // Mengganti AAAA, 3 rapid A di awal
-        "A ・ A A",
-        "A ・ ・ A",
-        "・ A A ・", 
-        
-        // Panjang 5 ketukan (Max 3 A rapid)
-        "A A A ・ A", // Mengganti AAAAA, 3 rapid A diselingi jeda
-        "A ・ A ・ A",
-        "A A ・ A A",
-        "A ・ ・ ・ A", 
-        
-        // Panjang 6 ketukan (Max 3 A rapid)
-        "A A A ・ A A", // Mengganti AAAAAA, 3 rapid A di awal, diselingi jeda
-        "A ・ A ・ A ・",
-        "A A ・ ・ A A"
+        // Panjang 2 ketukan
+        "A A", "A ・",
+        // Panjang 3 ketukan
+        "A A A", "A ・ A", "・ A ・",
+        // Panjang 4 ketukan
+        "A A A ・", "A ・ A A", "A ・ ・ A", "・ A A ・", 
+        // Panjang 5 ketukan
+        "A A A ・ A", "A ・ A ・ A", "A A ・ A A", "A ・ ・ ・ A", 
+        // Panjang 6 ketukan
+        "A A A ・ A A", "A ・ A ・ A ・", "A A ・ ・ A A"
     };
 
     // ============================================================
@@ -87,7 +80,6 @@ public class MonsterSequence : MonoBehaviour
     // ============================================================
     void Awake()
     {
-        // [Highlight Initialization]
         if (highlightPrefab != null)
         {
             highlightInstance = Instantiate(highlightPrefab, transform);
@@ -110,14 +102,14 @@ public class MonsterSequence : MonoBehaviour
         if (TargetManager.Instance != null)
             TargetManager.Instance.DeregisterMonster(this);
 
-        // Destroy UI icons when monster is destroyed
+        // Hapus ikon UI saat monster dihancurkan
         foreach (var ic in icons)
             Destroy(ic);
     }
 
     void OnEnable()
     {
-        // Listen to 240 BPM Beat for sound sequencing
+        // Dengarkan 240 BPM Beat untuk progres turn (System BPM)
         BeatManager.OnSystemBeat += RunNextCommandStep;
     }
 
@@ -130,10 +122,10 @@ public class MonsterSequence : MonoBehaviour
     {
         if (!isActive) return;
         HandleMovement();
-        HandleInputUpdate(); // Called every frame to check for GetKeyDown
+        HandleInputUpdate();
     }
 
-    // --- Highlight & Target Management Functions (Not significantly changed) ---
+    // --- Highlight & Target Management Functions ---
 
     public void SetTarget(bool value)
     {
@@ -142,7 +134,10 @@ public class MonsterSequence : MonoBehaviour
         if (value)
         {
             waitingForBeat = true;
-            nextSoundIndex = 0;
+            hasCued = false;
+            currentBeatIndex = 0;      // Reset beat index
+            isPromptingPhase = true;   // Mulai dari fase prompt
+            // waitingForCueDelay dihapus
         }
 
         if (highlightInstance != null)
@@ -153,7 +148,6 @@ public class MonsterSequence : MonoBehaviour
 
         if (!value)
         {
-            flashState = false;
             waitingForBeat = false;
 
             if (soundPlayer != null)
@@ -161,75 +155,74 @@ public class MonsterSequence : MonoBehaviour
         }
     }
 
-    public void SetSelected(bool state)
+    // Helper function to set alpha of a SpriteRenderer
+    void SetSpriteAlpha(SpriteRenderer renderer, float alpha)
     {
-        if (highlightRenderer != null)
-            highlightRenderer.enabled = state;
+        if (renderer != null)
+        {
+            Color color = renderer.color;
+            color.a = alpha;
+            renderer.color = color;
+        }
     }
 
+    // Helper function to set alpha for all SpriteRenderers in a GameObject (used for the highlight prefab)
+    void SetGameObjectAlpha(GameObject go, float alpha)
+    {
+        if (go == null) return;
+        SpriteRenderer[] renderers = go.GetComponentsInChildren<SpriteRenderer>();
+        foreach (var r in renderers)
+        {
+            Color color = r.color;
+            color.a = alpha;
+            r.color = color;
+        }
+    }
+
+    // Flashes the visual highlight
     public void FlashHighlight()
     {
         if (!isTarget) return;
 
-        if (highlightInstance != null)
-            highlightInstance.SetActive(true);
+        // Visual flash (instantaneous)
         if (highlightRenderer != null)
-            highlightRenderer.enabled = true;
+            SetSpriteAlpha(highlightRenderer, flashAlpha);
+        if (highlightInstance != null)
+            SetGameObjectAlpha(highlightInstance, flashAlpha);
 
-        ApplyAlphaToAll(flashAlpha);
-
+        // Start fade coroutine if not already running
         if (highlightFadeCoroutine != null)
             StopCoroutine(highlightFadeCoroutine);
 
-        float bpm = (BeatManager.Instance != null) ? BeatManager.Instance.mainBPM : 120f;
-        float beatInterval = 60f / Mathf.Max(0.0001f, bpm);
-        float fadeTime = Mathf.Clamp(fadeDuration, 0.05f, beatInterval * 0.9f);
-
-        highlightFadeCoroutine = StartCoroutine(FadeHighlightToBase(fadeTime));
+        highlightFadeCoroutine = StartCoroutine(FadeHighlightToBase());
     }
 
-    IEnumerator FadeHighlightToBase(float duration)
+    IEnumerator FadeHighlightToBase()
     {
-        float elapsed = 0f;
-        float startA = flashAlpha;
-        float endA = baseAlpha;
+        float timer = 0f;
+        float startAlpha = flashAlpha;
 
-        while (elapsed < duration)
+        while (timer < fadeDuration)
         {
-            elapsed += Time.deltaTime;
-            float t = Mathf.Clamp01(elapsed / duration);
-            float a = Mathf.Lerp(startA, endA, t);
-            ApplyAlphaToAll(a);
+            timer += Time.deltaTime;
+            float t = timer / fadeDuration;
+            float currentAlpha = Mathf.Lerp(startAlpha, baseAlpha, t);
+
+            if (highlightRenderer != null)
+                SetSpriteAlpha(highlightRenderer, currentAlpha);
+            if (highlightInstance != null)
+                SetGameObjectAlpha(highlightInstance, currentAlpha);
+
             yield return null;
         }
 
-        ApplyAlphaToAll(endA);
-    }
-
-    void ApplyAlphaToAll(float a)
-    {
+        // Ensure it ends exactly at baseAlpha
         if (highlightRenderer != null)
-            SetSpriteAlpha(highlightRenderer, a);
-
+            SetSpriteAlpha(highlightRenderer, baseAlpha);
         if (highlightInstance != null)
-            SetGameObjectAlpha(highlightInstance, a);
-    }
+            SetGameObjectAlpha(highlightInstance, baseAlpha);
 
-    void SetSpriteAlpha(SpriteRenderer sr, float a)
-    {
-        Color c = sr.color;
-        c.a = a;
-        sr.color = c;
-    }
-
-    void SetGameObjectAlpha(GameObject go, float a)
-    {
-        if (go == null) return;
-        SpriteRenderer sr = go.GetComponent<SpriteRenderer>();
-        if (sr != null) { SetSpriteAlpha(sr, a); return; }
-
-        SpriteRenderer childSr = go.GetComponentInChildren<SpriteRenderer>();
-        if (childSr != null) { SetSpriteAlpha(childSr, a); return; }
+        highlightFadeCoroutine = null;
     }
 
     public void ActivateSequence()
@@ -239,75 +232,118 @@ public class MonsterSequence : MonoBehaviour
 
         string pattern = commandPatterns[UnityEngine.Random.Range(0, commandPatterns.Length)];
         sequence.Clear();
-        // Split the pattern, ensuring '・' characters are handled correctly
+        // Membagi pola, pastikan karakter '・' ditangani dengan benar
         sequence.AddRange(pattern.Split(' ').Where(s => !string.IsNullOrEmpty(s)));
 
         CreateUI();
 
+        // Reset status
+        isPromptingPhase = true;
+        currentBeatIndex = 0;
+        hasCued = false;
+
+        // Play spawn sound (if any)
         if (soundPlayer != null && spawnClip != null)
             soundPlayer.PlayCustomSound(spawnClip);
     }
 
-    // ============================================================
-    // MOVEMENT & DEATH LINE (FIX for Bug 3: Miss meter on Death)
-    // ============================================================
+    // Handles non-rhythm movement (e.g., scrolling across the screen)
     void HandleMovement()
     {
+        if (!isActive) return;
+
+        Vector3 finalDirection = moveDirection;
+
+        // Tambahkan gerakan tak teratur jika diaktifkan
         if (isIrregular)
         {
-            Vector3 baseMove = moveDirection * moveSpeed * Time.deltaTime;
-            float offset = Mathf.Sin(Time.time * irregularFrequency) * irregularAmplitude;
-            Vector3 zigzag = new Vector3(0, offset * Time.deltaTime, 0);
-
-            transform.position += baseMove + zigzag;
-        }
-        else
-        {
-            transform.position += moveDirection * moveSpeed * Time.deltaTime;
+            float yOffset = Mathf.Sin(Time.time * irregularFrequency) * irregularAmplitude;
+            finalDirection += new Vector3(0, yOffset, 0);
         }
 
-        if (deathLine != null)
-        {
-            // Check if it crosses the death line
-            if ((moveDirection.x < 0 && transform.position.x <= deathLine.position.x) ||
-                (moveDirection.x > 0 && transform.position.x >= deathLine.position.x))
-            {
-                // FIX BUG 3: Add Miss when monster hits the Death Line
-                if (TrustMeterManager.Instance != null)
-                    TrustMeterManager.Instance.AddMiss();
+        transform.Translate(finalDirection * moveSpeed * Time.deltaTime);
 
-                Destroy(gameObject);
-            }
+        // Cek jika sudah melewati deathLine
+        if (deathLine != null && moveDirection.x < 0 && transform.position.x < deathLine.position.x)
+        {
+            // Trigger DeathLine logic
+            OnTriggerEnter2D(deathLine.GetComponent<Collider2D>());
         }
     }
 
     // ============================================================
-    // BEAT AND SOUND SEQUENCING (FIXED for 240 BPM Sound)
+    // BEAT AND SOUND SEQUENCING (TURN LOGIC) - UPDATED FOR FASTER CUE
     // ============================================================
     void RunNextCommandStep(int rhythmType)
     {
         if (!isTarget || !isActive) return;
         if (BeatManager.Instance == null) return;
 
-        // Quantization: tunggu Main Pulse (120 BPM) untuk memulai urutan
+        // 1. Quantization: tunggu Main Pulse (120 BPM) untuk memulai urutan
         if (waitingForBeat)
         {
-            // Pastikan ini adalah Main Pulse (120 BPM)
+            // ASUMSI: rhythmType adalah BPM (120 atau 240). Cek 120 BPM untuk memulai.
             if (rhythmType == (int)BeatManager.Instance.mainBPM)
             {
-                waitingForBeat = false; // Urutan suara dimulai
+                waitingForBeat = false; // Urutan dimulai
             }
-            else
+            return; // Tunggu Main Pulse 120 BPM
+        }
+
+        // --- PHASE 1: MONSTER PROMPT / ECHO (240 BPM) ---
+        if (isPromptingPhase)
+        {
+            if (currentBeatIndex < sequence.Count)
             {
-                return; // Tunggu Main Pulse 120 BPM
+                // A. Prompt Sound (Plays full pattern)
+                string currentCmd = sequence[currentBeatIndex];
+
+                if (currentCmd != "・" && soundPlayer != null)
+                {
+                    soundPlayer.PlaySound(currentCmd);
+                }
+
+                // B. Visual Prompt (Flash)
+                FlashHighlight();
+
+                // C. Advance to the next beat
+                currentBeatIndex++;
+                return;
+            }
+            else // Pola sudah selesai dimainkan.
+            {
+                // D. Sinyalkan bahwa fase prompt telah berakhir
+                isPromptingPhase = false;
+                // E. JANGAN return, FALL THROUGH ke logika Cue Sound di bawah.
             }
         }
 
-        // --- LOGIC BARU: Konsumsi PAUSE ('・') secara OTOMATIS pada beat tick ---
-        // Jika command pertama yang diharapkan adalah PAUSE ('・'), konsumsi dan lanjutkan.
-        if (sequence.Count > 0 && sequence[0] == "・")
+        // --- PHASE 1.5: CUE SOUND (Hanya berjalan sekali, menunggu 120 BPM) ---
+        if (!isPromptingPhase && !hasCued)
         {
-            // Hapus command PAUSE ('・') dari daftar yang diharapkan
+            // PERUBAHAN UTAMA: Hanya mainkan Cue Sound jika ketukan saat ini adalah ketukan 120 BPM (Main Pulse)
+            if (rhythmType == (int)BeatManager.Instance.mainBPM)
+            {
+                if (cueSoundClip != null && soundPlayer != null)
+                {
+                    // Cue Sound sekarang akan SELALU selaras dengan downbeat (120 BPM)
+                    soundPlayer.PlayCustomSound(cueSoundClip);
+                }
+
+                hasCued = true;
+                currentBeatIndex = 0; // Reset index untuk player consumption
+            }
+
+            // Kita harus return di sini (terlepas dari apakah cue dimainkan atau tidak)
+            // untuk mencegah Phase 2 berjalan sebelum cue dimainkan.
+            return;
+        }
+
+        // --- PHASE 2: PLAYER INPUT (Auto-consume Pause '・' only) ---
+        // Logika ini hanya berjalan jika hasCued=true
+        if (hasCued && sequence.Count > 0 && sequence[0] == "・")
+        {
+            // Hapus command PAUSE ('・')
             if (icons.Count > 0)
             {
                 Destroy(icons[0]);
@@ -315,48 +351,26 @@ public class MonsterSequence : MonoBehaviour
             }
             sequence.RemoveAt(0);
 
-            // Jika ini adalah langkah terakhir, selesai.
             if (sequence.Count == 0)
             {
                 OnSequenceComplete();
                 return;
             }
         }
-        // --- END LOGIC BARU ---
-
-        // RunNextCommandStep dilanggan ke BeatManager.OnSystemBeat (240 BPM).
-
-        if (nextSoundIndex >= sequence.Count)
-        {
-            // Urutan suara monster selesai
-            return;
-        }
-
-        string cmd = sequence[nextSoundIndex];
-
-        // Mainkan suara kecuali itu adalah Pause command '・'
-        if (cmd != "・" && soundPlayer != null)
-        {
-            soundPlayer.PlaySound(cmd);
-        }
-
-        nextSoundIndex++;
     }
 
     // ============================================================
-    // INPUT HANDLING (FIX for Bug 2: Input Registration & Bug 3: Miss Call)
+    // INPUT HANDLING
     // ============================================================
     void HandleInputUpdate()
     {
-        if (!isTarget) return;
+        // Input hanya valid jika monster sudah selesai prompting DAN cue sound sudah dimainkan
+        // isPromptingPhase=false, hasCued=true
+        if (!isTarget || isPromptingPhase || !hasCued) return;
         if (sequence.Count == 0) return;
 
-        // Cek hanya untuk tombol input yang valid (A, S, J, K). 
-        // Tombol '・' (Pause/Space) tidak lagi memerlukan input.
-        // Perubahan: Hapus "・" dari array yang dicek.
         foreach (string cmd in new string[] { "A", "S", "J", "K" })
         {
-            // Check GetKeyDown from InputManager
             if (InputManager.Instance != null && InputManager.Instance.IsCommandPressed(cmd))
                 HandleInput(cmd);
         }
@@ -366,12 +380,11 @@ public class MonsterSequence : MonoBehaviour
     {
         if (sequence.Count == 0) return;
 
-        // Quantization Check (Early Miss)
-        if (waitingForBeat)
+        // Input tidak valid jika masih di fase Prompting (belum ada Cue)
+        if (isPromptingPhase || !hasCued)
         {
-            // Player pressed a button before the monster sequence started (early miss)
             if (TrustMeterManager.Instance != null)
-                TrustMeterManager.Instance.AddMiss(); // FIX BUG 3
+                TrustMeterManager.Instance.AddMiss();
 
             TargetManager.Instance?.SetManualTarget(null); // Reset target
             return;
@@ -379,17 +392,15 @@ public class MonsterSequence : MonoBehaviour
 
         string expected = sequence[0];
 
-        // --- LOGIC BARU: Player input saat harus menunggu PAUSE ('・') ---
+        // Player input saat harus menunggu PAUSE ('・')
         if (expected == "・")
         {
-            // Player menekan tombol saat seharusnya menunggu (Miss)
             if (TrustMeterManager.Instance != null)
                 TrustMeterManager.Instance.AddMiss();
 
             TargetManager.Instance?.SetManualTarget(null); // Reset target
-            return; // Jangan hapus '・', biarkan RunNextCommandStep yang menghapusnya di beat berikutnya
+            return;
         }
-        // --- END LOGIC BARU ---
 
         // Check Timing Window from BeatManager
         bool isInputWindowOpen = BeatManager.Instance != null && BeatManager.Instance.isInputWindowOpen;
@@ -400,9 +411,9 @@ public class MonsterSequence : MonoBehaviour
             bool isPerfect = isInputWindowOpen;
 
             if (TrustMeterManager.Instance != null)
-                TrustMeterManager.Instance.AddHit(isPerfect); // FIX BUG 3: Call AddHit
+                TrustMeterManager.Instance.AddHit(isPerfect);
 
-            // Remove the completed command (UI)
+            // Hapus command yang sudah selesai
             if (icons.Count > 0)
             {
                 Destroy(icons[0]);
@@ -410,9 +421,13 @@ public class MonsterSequence : MonoBehaviour
             }
             sequence.RemoveAt(0);
 
-            // Play feedback sound
-            if (pressed != "・" && soundPlayer != null) // '・' tidak pernah dicapai di sini
-                soundPlayer.PlaySound(pressed);
+            FlashHighlight(); // Beri feedback visual
+
+            // Play generic Hit Feedback sound 
+            if (soundPlayer != null && hitFeedbackClip != null) // Menggunakan hitFeedbackClip yang baru
+                soundPlayer.PlayCustomSound(hitFeedbackClip);
+            else if (soundPlayer != null && spawnClip != null) // Fallback ke spawnClip jika hitFeedbackClip kosong
+                soundPlayer.PlayCustomSound(spawnClip);
 
             if (sequence.Count == 0)
                 OnSequenceComplete();
@@ -421,7 +436,7 @@ public class MonsterSequence : MonoBehaviour
         {
             // Incorrect Input: Miss
             if (TrustMeterManager.Instance != null)
-                TrustMeterManager.Instance.AddMiss(); // FIX BUG 3: Call AddMiss
+                TrustMeterManager.Instance.AddMiss();
 
             TargetManager.Instance?.SetManualTarget(null); // Reset target
         }

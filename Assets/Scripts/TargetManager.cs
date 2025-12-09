@@ -99,7 +99,7 @@ public class TargetManager : MonoBehaviour
         // Menonaktifkan status target pada monster lama
         if (currentTarget != null)
         {
-            currentTarget.SetSelected(false);
+            // [BUG FIX]: Mengganti SetSelected(false) menjadi SetTarget(false)
             currentTarget.SetTarget(false);
         }
 
@@ -107,9 +107,10 @@ public class TargetManager : MonoBehaviour
 
         if (currentTarget != null)
         {
-            // Mengaktifkan status target pada monster baru
-            currentTarget.SetSelected(true);
+            // [BUG FIX]: Mengganti SetSelected(true) menjadi SetTarget(true)
+            // Dan menghapus baris duplikat currentTarget.SetTarget(true)
             currentTarget.SetTarget(true);
+
             currentTarget.ActivateSequence(); // Memulai urutan command monster baru
 
             currentTargetIndex = detectedMonsters.IndexOf(target);
