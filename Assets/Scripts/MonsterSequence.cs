@@ -272,7 +272,7 @@ public class MonsterSequence : MonoBehaviour
     }
 
     // ============================================================
-    // BEAT AND SOUND SEQUENCING (TURN LOGIC) - UPDATED FOR FASTER CUE
+    // BEAT AND SOUND SEQUENCING (TURN LOGIC) - REVERTED TO FAST CUE
     // ============================================================
     void RunNextCommandStep(int rhythmType)
     {
@@ -318,24 +318,21 @@ public class MonsterSequence : MonoBehaviour
             }
         }
 
-        // --- PHASE 1.5: CUE SOUND (Hanya berjalan sekali, menunggu 120 BPM) ---
+        // --- PHASE 1.5: CUE SOUND (Hanya berjalan sekali, dipicu pada 240 BPM berikutnya) ---
         if (!isPromptingPhase && !hasCued)
         {
-            // PERUBAHAN UTAMA: Hanya mainkan Cue Sound jika ketukan saat ini adalah ketukan 120 BPM (Main Pulse)
-            if (rhythmType == (int)BeatManager.Instance.mainBPM)
+            // Cue Sound dipicu pada ketukan 240 BPM pertama setelah prompt selesai.
+            // Ini memberikan jeda minimum 0.25 detik (dan membuat "A A A" terasa cepat).
+            if (cueSoundClip != null && soundPlayer != null)
             {
-                if (cueSoundClip != null && soundPlayer != null)
-                {
-                    // Cue Sound sekarang akan SELALU selaras dengan downbeat (120 BPM)
-                    soundPlayer.PlayCustomSound(cueSoundClip);
-                }
-
-                hasCued = true;
-                currentBeatIndex = 0; // Reset index untuk player consumption
+                soundPlayer.PlayCustomSound(cueSoundClip);
             }
 
-            // Kita harus return di sini (terlepas dari apakah cue dimainkan atau tidak)
-            // untuk mencegah Phase 2 berjalan sebelum cue dimainkan.
+            hasCued = true;
+            currentBeatIndex = 0; // Reset index untuk player consumption
+
+            // Kita harus return di sini untuk mencegah Phase 2 (Auto-consume Pause) 
+            // berjalan pada beat yang sama saat cue dimainkan.
             return;
         }
 

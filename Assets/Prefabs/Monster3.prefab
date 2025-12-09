@@ -347,6 +347,7 @@ MonoBehaviour:
   soundPlayer: {fileID: -5697951776253929421}
   spawnClip: {fileID: 0}
   cueSoundClip: {fileID: 8300000, guid: 5b7a068a754e7ce47bbae334f7fdd5d2, type: 3}
+  hitFeedbackClip: {fileID: 0}
   isIrregular: 0
   irregularAmplitude: 0.3
   irregularFrequency: 3
@@ -385,7 +386,7 @@ AudioSource:
   OutputAudioMixerGroup: {fileID: 0}
   m_audioClip: {fileID: 0}
   m_PlayOnAwake: 0
-  m_Volume: 1
+  m_Volume: 0.7
   m_Pitch: 1
   Loop: 0
   Mute: 0

@@ -1561,7 +1561,7 @@ MonoBehaviour:
   - {fileID: 8448128570662851074, guid: 5b0ac2f584e8bcd4da0d491360d5098b, type: 3}
   player: {fileID: 1643196111992459892, guid: 96e781c05b91c1d428e40a858e9e5dee, type: 3}
   spawnDistance: 12
-  minSpawnTime: 4
+  minSpawnTime: 3
   maxSpawnTime: 7
   minY: -4
   maxY: -2
@@ -1697,6 +1697,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 3212886424474798281, guid: 96e781c05b91c1d428e40a858e9e5dee, type: 3}
+      propertyPath: clipA
+      value: 
+      objectReference: {fileID: 8300000, guid: ddf4ea34034066640a4d2d177515c276, type: 3}
     - target: {fileID: 5763980199121583524, guid: 96e781c05b91c1d428e40a858e9e5dee, type: 3}
       propertyPath: m_Materials.Array.data[0]
       value: 
