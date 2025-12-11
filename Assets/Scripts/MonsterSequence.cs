@@ -9,7 +9,8 @@ public class MonsterSequence : MonoBehaviour
     [Header("UI Settings")]
     public Transform uiParent;
     public GameObject iconPrefab;
-    public Sprite spriteA, spriteS, spriteJ, spriteK, spriteEmpty;
+    // Disimpan hanya sprite yang relevan untuk gameplay: A dan Empty (untuk pause/・)
+    public Sprite spriteA, spriteEmpty;
 
     [Header("Sequence Settings")]
     public float moveSpeed = 2f;
@@ -21,6 +22,14 @@ public class MonsterSequence : MonoBehaviour
     public AudioClip spawnClip;
     public AudioClip cueSoundClip; // <--- SUARA CUE "GO!" UNTUK MEMULAI TURN PLAYER
     public AudioClip hitFeedbackClip; // <--- NEW: SUARA FEEDBACK JIKA PLAYER BERHASIL INPUT
+
+    // --- NEW: Audio Pola ---
+    [Header("Monster Pattern Sound")]
+    public int patternID; // 1, 2, atau 3
+    [Tooltip("Array klip suara untuk pola (Indeks 0=Pola 1, 1=Pola 2, 2=Pola 3).")]
+    public AudioClip[] patternAudioClips;
+    private AudioSource audioSource;
+    // -------------------------
 
     [Header("Irregular Movement")]
     public bool isIrregular = false;
@@ -52,27 +61,22 @@ public class MonsterSequence : MonoBehaviour
     // --- SEQUENCE STATE FOR RHYTHM (REVISED) ---
     public bool waitingForBeat = false; // Waiting for 120 BPM quantization start
     private bool hasCued = false; // Melacak apakah suara Cue sudah dimainkan
+    private bool hasPatternAudioPlayed = false; // NEW: Melacak apakah klip pola sudah dimainkan
 
     // Index untuk melacak beat saat fase prompting/echo monster
     private int currentBeatIndex = 0;
     // Flag untuk memisahkan giliran monster (prompt) dan giliran player (input)
     private bool isPromptingPhase = true;
 
-    // VARIABEL waitingForCueDelay DIHAPUS UNTUK MEMPERCEPAT CUE
-
-    // --- POLA (Variasi 2 hingga 6 ketukan, max 3 'A' rapid berturut-turut) ---
+    // --- POLA (Menggunakan pola spesifik dari skrip Python: total 6 ketukan) ---
     private readonly string[] commandPatterns = new string[]
     {
-        // Panjang 2 ketukan
-        "A A", "A ・",
-        // Panjang 3 ketukan
-        "A A A", "A ・ A", "・ A ・",
-        // Panjang 4 ketukan
-        "A A A ・", "A ・ A A", "A ・ ・ A", "・ A A ・", 
-        // Panjang 5 ketukan
-        "A A A ・ A", "A ・ A ・ A", "A A ・ A A", "A ・ ・ ・ A", 
-        // Panjang 6 ketukan
-        "A A A ・ A A", "A ・ A ・ A ・", "A A ・ ・ A A"
+        // ["A", "-", "A", "-", "A", "-"] -> '・' adalah '-' (pause)
+        "A ・ A ・ A ・",
+        // ["A", "-", "-", "A", "A", "-"]
+        "A ・ ・ A A ・",
+        // ["A", "A", "-", "A", "A", "-"]
+        "A A ・ A A ・"
     };
 
     // ============================================================
@@ -80,6 +84,21 @@ public class MonsterSequence : MonoBehaviour
     // ============================================================
     void Awake()
     {
+        // Dapatkan AudioSource. JIKA TIDAK ADA, TAMBAHKAN SECARA OTOMATIS.
+        audioSource = GetComponent<AudioSource>();
+        if (audioSource == null)
+        {
+            audioSource = gameObject.AddComponent<AudioSource>();
+            Debug.LogWarning($"AudioSource tidak ditemukan pada Monster {gameObject.name}. Komponen baru telah ditambahkan secara otomatis.");
+        }
+
+        // Pastikan konfigurasi AudioSource untuk PlayOneShot
+        if (audioSource != null)
+        {
+            audioSource.playOnAwake = false;
+            audioSource.clip = null; // Pastikan tidak ada clip default yang terpasang
+        }
+
         if (highlightPrefab != null)
         {
             highlightInstance = Instantiate(highlightPrefab, transform);
@@ -135,9 +154,9 @@ public class MonsterSequence : MonoBehaviour
         {
             waitingForBeat = true;
             hasCued = false;
-            currentBeatIndex = 0;      // Reset beat index
-            isPromptingPhase = true;   // Mulai dari fase prompt
-            // waitingForCueDelay dihapus
+            hasPatternAudioPlayed = false; // NEW: Reset flag audio
+            currentBeatIndex = 0;       // Reset beat index
+            isPromptingPhase = true;    // Mulai dari fase prompt
         }
 
         if (highlightInstance != null)
@@ -225,14 +244,19 @@ public class MonsterSequence : MonoBehaviour
         highlightFadeCoroutine = null;
     }
 
+
     public void ActivateSequence()
     {
         if (isActive) return;
         isActive = true;
 
-        string pattern = commandPatterns[UnityEngine.Random.Range(0, commandPatterns.Length)];
+        // --- NEW: Tentukan Pattern ID dan Sequence ---
+        int patternIndex = UnityEngine.Random.Range(0, commandPatterns.Length);
+        patternID = patternIndex + 1; // 1, 2, atau 3
+        string pattern = commandPatterns[patternIndex];
+
         sequence.Clear();
-        // Membagi pola, pastikan karakter '・' ditangani dengan benar
+        // Membagi pola
         sequence.AddRange(pattern.Split(' ').Where(s => !string.IsNullOrEmpty(s)));
 
         CreateUI();
@@ -241,11 +265,44 @@ public class MonsterSequence : MonoBehaviour
         isPromptingPhase = true;
         currentBeatIndex = 0;
         hasCued = false;
+        hasPatternAudioPlayed = false; // Reset flag audio
 
         // Play spawn sound (if any)
         if (soundPlayer != null && spawnClip != null)
             soundPlayer.PlayCustomSound(spawnClip);
     }
+
+    // NEW: Memutar klip audio penuh yang sesuai dengan pola
+    private void PlayPatternAudio()
+    {
+        if (hasPatternAudioPlayed) return;
+
+        // patternID (1, 2, 3) dikonversi ke indeks array (0, 1, 2)
+        int index = patternID - 1;
+
+        if (audioSource != null && patternAudioClips != null && index >= 0 && index < patternAudioClips.Length)
+        {
+            AudioClip clipToPlay = patternAudioClips[index];
+
+            if (clipToPlay != null)
+            {
+                // JANGAN menggunakan PlayOneShot jika AudioSource sudah memainkan klip lain.
+                // Namun, karena ini dipicu pada beat yang terkuantisasi, PlayOneShot aman.
+                audioSource.PlayOneShot(clipToPlay);
+                Debug.Log($"Monster plays Pattern {patternID} audio clip.");
+                hasPatternAudioPlayed = true;
+            }
+            else
+            {
+                Debug.LogWarning($"AudioClip untuk Pola {patternID} (Indeks {index}) tidak ditetapkan di Inspector. Pastikan klip telah diseret ke array.");
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"Gagal memutar suara pola. AudioSource null: {audioSource == null}, PatternID: {patternID}, Array Size: {patternAudioClips?.Length ?? 0}");
+        }
+    }
+
 
     // Handles non-rhythm movement (e.g., scrolling across the screen)
     void HandleMovement()
@@ -272,7 +329,7 @@ public class MonsterSequence : MonoBehaviour
     }
 
     // ============================================================
-    // BEAT AND SOUND SEQUENCING (TURN LOGIC) - REVERTED TO FAST CUE
+    // BEAT AND SOUND SEQUENCING (TURN LOGIC) - Menggunakan 240 BPM
     // ============================================================
     void RunNextCommandStep(int rhythmType)
     {
@@ -282,10 +339,11 @@ public class MonsterSequence : MonoBehaviour
         // 1. Quantization: tunggu Main Pulse (120 BPM) untuk memulai urutan
         if (waitingForBeat)
         {
-            // ASUMSI: rhythmType adalah BPM (120 atau 240). Cek 120 BPM untuk memulai.
+            // ASUMSI: rhythmType adalah BPM. Cek 120 BPM untuk memulai.
             if (rhythmType == (int)BeatManager.Instance.mainBPM)
             {
                 waitingForBeat = false; // Urutan dimulai
+                PlayPatternAudio(); // Play full pattern audio saat kuantisasi selesai
             }
             return; // Tunggu Main Pulse 120 BPM
         }
@@ -295,15 +353,7 @@ public class MonsterSequence : MonoBehaviour
         {
             if (currentBeatIndex < sequence.Count)
             {
-                // A. Prompt Sound (Plays full pattern)
-                string currentCmd = sequence[currentBeatIndex];
-
-                if (currentCmd != "・" && soundPlayer != null)
-                {
-                    soundPlayer.PlaySound(currentCmd);
-                }
-
-                // B. Visual Prompt (Flash)
+                // B. Visual Prompt (Flash) - TETAP DIJAGA SEBAGAI VISUAL CUE
                 FlashHighlight();
 
                 // C. Advance to the next beat
@@ -322,7 +372,6 @@ public class MonsterSequence : MonoBehaviour
         if (!isPromptingPhase && !hasCued)
         {
             // Cue Sound dipicu pada ketukan 240 BPM pertama setelah prompt selesai.
-            // Ini memberikan jeda minimum 0.25 detik (dan membuat "A A A" terasa cepat).
             if (cueSoundClip != null && soundPlayer != null)
             {
                 soundPlayer.PlayCustomSound(cueSoundClip);
@@ -366,11 +415,9 @@ public class MonsterSequence : MonoBehaviour
         if (!isTarget || isPromptingPhase || !hasCued) return;
         if (sequence.Count == 0) return;
 
-        foreach (string cmd in new string[] { "A", "S", "J", "K" })
-        {
-            if (InputManager.Instance != null && InputManager.Instance.IsCommandPressed(cmd))
-                HandleInput(cmd);
-        }
+        // Hanya cek input "A" karena gameplay hanya menggunakan tombol ini
+        if (InputManager.Instance != null && InputManager.Instance.IsCommandPressed("A"))
+            HandleInput("A");
     }
 
     void HandleInput(string pressed)
@@ -432,6 +479,7 @@ public class MonsterSequence : MonoBehaviour
         else
         {
             // Incorrect Input: Miss
+            // MEMPERBAIKI TYPO TrustMeterManagerManager
             if (TrustMeterManager.Instance != null)
                 TrustMeterManager.Instance.AddMiss();
 
@@ -465,10 +513,10 @@ public class MonsterSequence : MonoBehaviour
             switch (cmd)
             {
                 case "A": defaultSprite = spriteA; break;
-                case "S": defaultSprite = spriteS; break;
-                case "J": defaultSprite = spriteJ; break;
-                case "K": defaultSprite = spriteK; break;
                 case "・": defaultSprite = spriteEmpty; break;
+                default:
+                    Debug.LogWarning($"Command '{cmd}' tidak memiliki sprite yang ditetapkan.");
+                    break;
             }
 
             if (img != null)

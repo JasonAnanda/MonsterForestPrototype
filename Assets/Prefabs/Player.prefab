@@ -100,7 +100,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   audioSource: {fileID: 6882835548939774428}
-  clipA: {fileID: 8300000, guid: ddf4ea34034066640a4d2d177515c276, type: 3}
+  clipA: {fileID: 8300000, guid: 807f9316d21761e48ad891cdca2bea84, type: 3}
   clipS: {fileID: 8300000, guid: d48e68b5bcd7523448c5babea39710a8, type: 3}
   clipJ: {fileID: 8300000, guid: cd8cfcc7c1fa7864fb004ba3cb6afc1d, type: 3}
   clipK: {fileID: 8300000, guid: e200a67e95230d348bcdfb166a36f24e, type: 3}

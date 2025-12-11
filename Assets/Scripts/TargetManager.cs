@@ -2,18 +2,25 @@
 using UnityEngine;
 using System.Linq;
 
+/// <summary>
+/// Bertanggung jawab untuk mengelola monster mana yang saat ini menjadi target input pemain.
+/// Sekarang menggunakan input klik mouse.
+/// </summary>
 public class TargetManager : MonoBehaviour
 {
     public static TargetManager Instance;
 
     [Header("Detection Settings")]
-    public float detectionRadius = 15f; // Radius deteksi target
+    [Tooltip("Radius deteksi target (hanya untuk visualisasi Gizmos/penargetan otomatis).")]
+    public float detectionRadius = 15f;
     public LayerMask monsterLayer;
 
     private MonsterSequence currentTarget;
+    // detectedMonsters sekarang hanya digunakan untuk fungsi deteksi otomatis jika diperlukan
     private readonly List<MonsterSequence> detectedMonsters = new();
+    // registeredMonsters tetap menyimpan semua monster aktif di scene
     private readonly List<MonsterSequence> registeredMonsters = new();
-    private int currentTargetIndex = -1;
+    private int currentTargetIndex = -1; // Tidak terlalu relevan lagi dengan input mouse
 
     void Awake()
     {
@@ -32,65 +39,58 @@ public class TargetManager : MonoBehaviour
         BeatManager.OnSystemBeat -= SystemBeatFlash;
     }
 
-    // Mengganti MainPulseFlash menjadi SystemBeatFlash untuk memicu 240 BPM
-    private void SystemBeatFlash(int rhythmType) // Menerima rhythmType dari OnSystemBeat
+    // Memicu visual flash pada target saat System Beat (240 BPM)
+    private void SystemBeatFlash(int rhythmType)
     {
-        // Memicu visual flash pada target saat System Beat (240 BPM)
         if (currentTarget != null)
             currentTarget.FlashHighlight();
     }
 
     void Update()
     {
-        DetectMonsters(); // Memperbarui daftar monster yang berada dalam radius
-        HandleTargetCyclingInput(); // Mengelola input Q/E untuk berpindah target
+        DetectMonsters(); // Memperbarui daftar monster yang berada dalam radius (opsional)
+        HandleMouseInput(); // Mengelola input mouse
     }
 
-    private void HandleTargetCyclingInput()
+    /// <summary>
+    /// Menangani input klik mouse untuk memilih monster baru.
+    /// </summary>
+    private void HandleMouseInput()
     {
-        List<MonsterSequence> validTargets = detectedMonsters;
-
-        if (validTargets.Count == 0)
+        if (Input.GetMouseButtonDown(0)) // Cek klik kiri mouse
         {
-            if (currentTarget != null) SetManualTarget(null);
-            return;
-        }
+            // Konversi posisi mouse di layar menjadi posisi di dunia game (World Space)
+            Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            mouseWorldPos.z = 0; // Pastikan Z=0 untuk 2D
 
-        int direction = 0;
+            // Gunakan Physics2D.OverlapPoint untuk mendeteksi apakah ada Collider2D monster
+            Collider2D hit = Physics2D.OverlapPoint(mouseWorldPos, monsterLayer);
 
-        if (Input.GetKeyDown(KeyCode.E))
-        {
-            direction = 1;
-        }
-        else if (Input.GetKeyDown(KeyCode.Q))
-        {
-            direction = -1;
-        }
-
-        if (direction != 0)
-        {
-            int currentValidIndex = validTargets.IndexOf(currentTarget);
-
-            if (currentValidIndex == -1)
+            if (hit != null)
             {
-                currentValidIndex = (direction > 0) ? -1 : validTargets.Count;
+                // Coba dapatkan komponen MonsterSequence dari objek yang diklik
+                if (hit.TryGetComponent(out MonsterSequence seq))
+                {
+                    // Hanya pilih monster yang terdaftar (aktif)
+                    if (registeredMonsters.Contains(seq))
+                    {
+                        SetManualTarget(seq);
+                    }
+                }
             }
-
-            int newIndex = currentValidIndex + direction;
-
-            // Handle wrap-around (kembali ke awal/akhir daftar)
-            if (newIndex >= validTargets.Count)
+            // Tambahkan logika di sini jika Anda ingin klik di luar monster mereset target
+            /*
+            else
             {
-                newIndex = 0;
+                 // Jika mengklik area kosong, nonaktifkan target
+                 SetManualTarget(null);
             }
-            else if (newIndex < 0)
-            {
-                newIndex = validTargets.Count - 1;
-            }
-
-            SetManualTarget(validTargets[newIndex]);
+            */
         }
     }
+
+    // Fungsi `HandleTargetCyclingInput` yang lama telah dihapus atau dikosongkan
+    // untuk mengutamakan input mouse.
 
     public void SetManualTarget(MonsterSequence target)
     {
@@ -99,7 +99,6 @@ public class TargetManager : MonoBehaviour
         // Menonaktifkan status target pada monster lama
         if (currentTarget != null)
         {
-            // [BUG FIX]: Mengganti SetSelected(false) menjadi SetTarget(false)
             currentTarget.SetTarget(false);
         }
 
@@ -107,13 +106,14 @@ public class TargetManager : MonoBehaviour
 
         if (currentTarget != null)
         {
-            // [BUG FIX]: Mengganti SetSelected(true) menjadi SetTarget(true)
-            // Dan menghapus baris duplikat currentTarget.SetTarget(true)
+            // Mengaktifkan status target pada monster baru
             currentTarget.SetTarget(true);
 
-            currentTarget.ActivateSequence(); // Memulai urutan command monster baru
+            // Jika monster baru dipilih, pastikan urutan dimulai
+            currentTarget.ActivateSequence();
 
-            currentTargetIndex = detectedMonsters.IndexOf(target);
+            // Update indeks (walaupun tidak digunakan untuk cycling, ini bisa untuk debugging)
+            currentTargetIndex = registeredMonsters.IndexOf(target);
         }
         else
         {
@@ -123,6 +123,9 @@ public class TargetManager : MonoBehaviour
 
     void DetectMonsters()
     {
+        // Fungsi ini sekarang lebih opsional, hanya untuk mendeteksi monster dalam radius
+        // jika kita ingin fungsi 'SetTarget' otomatis (misal: jika tidak ada target, pilih yang terdekat)
+
         detectedMonsters.Clear();
 
         // Deteksi menggunakan Physics2D.OverlapCircleAll
@@ -155,6 +158,12 @@ public class TargetManager : MonoBehaviour
     {
         if (m != null && !registeredMonsters.Contains(m))
             registeredMonsters.Add(m);
+
+        // Opsional: Jika tidak ada target, target monster yang baru di-register
+        // if (currentTarget == null)
+        // {
+        //     SetManualTarget(m);
+        // }
     }
 
     // Dipanggil oleh monster saat dihancurkan/mati
@@ -168,6 +177,8 @@ public class TargetManager : MonoBehaviour
         // Mereset target jika monster yang hilang adalah target saat ini
         if (currentTarget == m)
         {
+            // [LOGIKA DIHAPUS]: Kami tidak lagi memilih target baru secara otomatis.
+            // Setelah monster mati/hilang, currentTarget menjadi null.
             SetManualTarget(null);
         }
     }
