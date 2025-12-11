@@ -5,7 +5,7 @@ public class MonsterSpawner : MonoBehaviour
     public GameObject[] monsterPrefabs;
     public Transform player;
     public float spawnDistance = 12f;
-    public float minSpawnTime = 3f;
+    public float minSpawnTime = 2f;
     public float maxSpawnTime = 7f;
     public float minY = -4f;
     public float maxY = -2f;
