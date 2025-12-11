@@ -20,8 +20,8 @@ public class MonsterSequence : MonoBehaviour
     [Header("Sound")]
     public MonsterSoundPlayer soundPlayer;
     public AudioClip spawnClip;
-    public AudioClip cueSoundClip; // Suara Cue "GO!" untuk memulai turn player
-    public AudioClip hitFeedbackClip; // Suara Feedback jika player berhasil input
+    public AudioClip cueSoundClip; // <--- SUARA CUE "GO!" UNTUK MEMULAI TURN PLAYER
+    public AudioClip hitFeedbackClip; // <--- NEW: SUARA FEEDBACK JIKA PLAYER BERHASIL INPUT
 
     // --- NEW: Audio Pola ---
     [Header("Monster Pattern Sound")]
@@ -59,8 +59,7 @@ public class MonsterSequence : MonoBehaviour
     private bool isActive = false;
 
     // --- SEQUENCE STATE FOR RHYTHM (REVISED) ---
-    // Flag untuk kuantisasi: Menunggu 120 BPM (Main Pulse) untuk memulai.
-    public bool isQuantizing = false;
+    public bool waitingForBeat = false; // Waiting for 120 BPM quantization start
     private bool hasCued = false; // Melacak apakah suara Cue sudah dimainkan
 
     // Index untuk melacak beat saat fase prompting/echo monster
@@ -153,7 +152,7 @@ public class MonsterSequence : MonoBehaviour
 
         if (value)
         {
-            isQuantizing = true; // Mulai proses kuantisasi 120 BPM
+            waitingForBeat = true;
             hasCued = false;
             currentBeatIndex = 0;       // Reset beat index
             isPromptingPhase = true;    // Mulai dari fase prompt
@@ -167,7 +166,7 @@ public class MonsterSequence : MonoBehaviour
 
         if (!value)
         {
-            isQuantizing = false; // Hentikan kuantisasi
+            waitingForBeat = false;
 
             if (soundPlayer != null)
                 soundPlayer.StopCurrentSound();
@@ -284,7 +283,7 @@ public class MonsterSequence : MonoBehaviour
             if (clipToPlay != null)
             {
                 audioSource.PlayOneShot(clipToPlay);
-                Debug.Log($"Monster plays Pattern {patternID} audio clip on 120 BPM pulse.");
+                Debug.Log($"Monster plays Pattern {patternID} audio clip.");
             }
             else
             {
@@ -326,28 +325,19 @@ public class MonsterSequence : MonoBehaviour
         if (!isTarget || !isActive) return;
         if (BeatManager.Instance == null) return;
 
-        // 1. Quantization: TUNGGU Main Pulse (120 BPM) untuk memulai urutan
-        if (isQuantizing)
+        // 1. Quantization: tunggu Main Pulse (120 BPM) untuk memulai urutan
+        if (waitingForBeat)
         {
-            // Pengecekan Kuantisasi: Pastikan kita HANYA bereaksi terhadap Main Pulse (120 BPM).
+            // Cek 120 BPM untuk memulai.
             if (rhythmType == (int)BeatManager.Instance.mainBPM)
             {
-                // Main Pulse (120 BPM) Terdeteksi!
-                isQuantizing = false; // Kuantisasi Selesai
-                PlayPatternAudio();   // <--- MONSTER SOUND DIPUTAR TEPAT PADA 120 BPM PULSE.
-                                      // **TIDAK ADA RETURN DI SINI.** Eksekusi dilanjutkan ke logika prompting di bawah
-                                      // untuk menjalankan langkah visual pertama secara sinkron.
+                waitingForBeat = false; // Urutan dimulai
+                PlayPatternAudio(); // Play full pattern audio saat kuantisasi selesai
             }
-            else
-            {
-                // Ini adalah beat 240 BPM yang bukan pulsa utama (120 BPM). Lewati.
-                return;
-            }
+            return; // Tunggu Main Pulse 120 BPM
         }
 
         // --- PHASE 1: MONSTER PROMPT / ECHO (6 Beats Visual + Cue on Beat 6) ---
-        // Logika visual ini hanya berjalan pada System Beat (240 BPM) setelah kuantisasi selesai,
-        // termasuk langkah pertama yang baru saja disinkronkan dengan audio di atas.
         if (isPromptingPhase)
         {
             // Beat 1 hingga 5 (Indeks 0-4) - Hanya Flash Visual
