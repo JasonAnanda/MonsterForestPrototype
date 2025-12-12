@@ -11,6 +11,8 @@ public class MonsterSequence : MonoBehaviour
     public GameObject iconPrefab;
     // Disimpan hanya sprite yang relevan untuk gameplay: A dan Empty (untuk pause/・)
     public Sprite spriteA, spriteEmpty;
+    [Tooltip("不透明度を下げるレベル (0.0=透明, 1.0=完全不透明)")]
+    public float consumedAlpha = 0.3f; // 新しい設定
 
     [Header("Sequence Settings")]
     public float moveSpeed = 2f;
@@ -54,8 +56,12 @@ public class MonsterSequence : MonoBehaviour
 
     // Command sequence for the player (reduces with correct input)
     private List<string> sequence = new List<string>();
-    // UI icons corresponding to the sequence
-    private List<GameObject> icons = new List<GameObject>();
+
+    // Master list of ALL UI icons (GameObjects) for cleanup (icons are now persistent)
+    private List<GameObject> allIcons = new List<GameObject>();
+    // List of Image components for currently expected commands (synced with 'sequence' list)
+    private List<Image> activeImages = new List<Image>();
+
     private bool isActive = false;
 
     // --- SEQUENCE STATE FOR RHYTHM (REVISED) ---
@@ -123,8 +129,8 @@ public class MonsterSequence : MonoBehaviour
         if (TargetManager.Instance != null)
             TargetManager.Instance.DeregisterMonster(this);
 
-        // Hapus ikon UI saat monster dihancurkan
-        foreach (var ic in icons)
+        // Hapus SEMUA ikon UI saat monster dihancurkan (faded icons included)
+        foreach (var ic in allIcons)
             Destroy(ic);
     }
 
@@ -156,8 +162,8 @@ public class MonsterSequence : MonoBehaviour
         {
             isQuantizing = true; // Mulai proses kuantisasi 120 BPM
             hasCued = false;
-            currentBeatIndex = 0;       // Reset beat index
-            isPromptingPhase = true;    // Mulai dari fase prompt
+            currentBeatIndex = 0;       // Reset beat index
+            isPromptingPhase = true;    // Mulai dari fase prompt
         }
 
         if (highlightInstance != null)
@@ -337,7 +343,7 @@ public class MonsterSequence : MonoBehaviour
             if (isMainPulse)
             {
                 isQuantizing = false; // Kuantisasi Selesai
-                PlayPatternAudio();   // MONSTER SOUND DIPUTAR TEPAT PADA 120 BPM PULSE PERTAMA.
+                PlayPatternAudio();   // MONSTER SOUND DIPUTAR TEPAT PADA 120 BPM PULSE PERTAMA.
                 // Eksekusi dilanjutkan ke logika prompting di bawah untuk menjalankan langkah visual pertama (Beat 0)
             }
             else
@@ -352,7 +358,7 @@ public class MonsterSequence : MonoBehaviour
             // Beat 0 hingga 5 (Indeks 0-5) - Visual Flash. (sequence.Count = 6)
             if (currentBeatIndex < sequence.Count)
             {
-                // A. Visual Prompt (Flash) 
+                // A. Visual Prompt (Flash) 
                 FlashHighlight();
 
                 // B. Advance index
@@ -364,7 +370,7 @@ public class MonsterSequence : MonoBehaviour
             // **Ini adalah perbaikan bug overlap. Cue diputar 1 beat setelah pattern visual selesai.**
             else if (currentBeatIndex == sequence.Count)
             {
-                // A. Play Cue Sound "GO!" 
+                // A. Play Cue Sound "GO!" 
                 if (cueSoundClip != null && soundPlayer != null && !hasCued)
                 {
                     soundPlayer.PlayCustomSound(cueSoundClip);
@@ -393,13 +399,20 @@ public class MonsterSequence : MonoBehaviour
             // Kita hanya mengonsumsi '・' jika command berikutnya adalah '・'
             if (sequence[0] == "・")
             {
-                // Hapus command PAUSE ('・')
-                if (icons.Count > 0)
+                // NEW: Fade the active icon instead of destroying it
+                if (activeImages.Count > 0)
                 {
-                    Destroy(icons[0]);
-                    icons.RemoveAt(0);
+                    Image currentIcon = activeImages[0];
+                    if (currentIcon != null)
+                    {
+                        Color c = currentIcon.color;
+                        c.a = consumedAlpha; // Set opacity down
+                        currentIcon.color = c;
+                    }
+                    activeImages.RemoveAt(0); // Remove from active list
                 }
-                sequence.RemoveAt(0);
+
+                sequence.RemoveAt(0); // Hapus command PAUSE ('・')
 
                 if (sequence.Count == 0)
                 {
@@ -463,17 +476,24 @@ public class MonsterSequence : MonoBehaviour
             if (TrustMeterManager.Instance != null)
                 TrustMeterManager.Instance.AddHit(isPerfect);
 
-            // Hapus command yang sudah selesai
-            if (icons.Count > 0)
+            // NEW: Fade the active icon instead of destroying it
+            if (activeImages.Count > 0)
             {
-                Destroy(icons[0]);
-                icons.RemoveAt(0);
+                Image currentIcon = activeImages[0];
+                if (currentIcon != null)
+                {
+                    Color c = currentIcon.color;
+                    c.a = consumedAlpha; // Set opacity down
+                    currentIcon.color = c;
+                }
+                activeImages.RemoveAt(0); // Remove from active list
             }
-            sequence.RemoveAt(0);
+
+            sequence.RemoveAt(0); // Hapus command yang sudah selesai
 
             FlashHighlight(); // Beri feedback visual
 
-            // Play generic Hit Feedback sound 
+            // Play generic Hit Feedback sound 
             if (soundPlayer != null && hitFeedbackClip != null) // Menggunakan hitFeedbackClip yang baru
                 soundPlayer.PlayCustomSound(hitFeedbackClip);
             else if (soundPlayer != null && spawnClip != null) // Fallback ke spawnClip jika hitFeedbackClip kosong
@@ -506,7 +526,8 @@ public class MonsterSequence : MonoBehaviour
         for (int i = uiParent.childCount - 1; i >= 0; i--)
             Destroy(uiParent.GetChild(i).gameObject);
 
-        icons.Clear();
+        allIcons.Clear(); // Clear the master list
+        activeImages.Clear(); // Clear the active list
 
         // Instantiate new icons based on the command sequence
         foreach (string cmd in sequence)
@@ -525,9 +546,14 @@ public class MonsterSequence : MonoBehaviour
             }
 
             if (img != null)
+            {
                 img.sprite = defaultSprite;
+                // Set initial alpha to 1 (fully visible)
+                img.color = new Color(img.color.r, img.color.g, img.color.b, 1f);
+                activeImages.Add(img); // Add to active list
+            }
 
-            icons.Add(iconGO);
+            allIcons.Add(iconGO); // Add to master list for cleanup
         }
     }
 

@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
 
+/// <summary>
+/// Mengelola penghitung Miss (kekalahan) pemain dan memicu Game Over.
+/// </summary>
 public class TrustMeterManager : MonoBehaviour
 {
     public static TrustMeterManager Instance;
@@ -33,7 +36,6 @@ public class TrustMeterManager : MonoBehaviour
     // Dipanggil dari MonsterSequence saat input benar (Hit berhasil)
     public void AddHit(bool isPerfect)
     {
-        // FIX BUG 1: Meter tidak boleh reset ke 0 pada setiap hit.
         // Hit berhasil mengurangi akumulasi Miss / kerusakan sebanyak 1.
         if (currentMiss > 0)
         {
@@ -58,6 +60,25 @@ public class TrustMeterManager : MonoBehaviour
         {
             TriggerGameOver();
         }
+    }
+
+    /// <summary>
+    /// Mereset Miss Counter ke 0 dan mereset status Game Over.
+    /// Ini HANYA boleh dipanggil saat Game Over atau Restart Level.
+    /// </summary>
+    public void ResetMeter()
+    {
+        currentMiss = 0;
+
+        // Pastikan Time Scale kembali normal jika dipanggil setelah Game Over
+        if (Time.timeScale == 0f)
+            Time.timeScale = 1f;
+
+        if (gameOverPanel != null)
+            gameOverPanel.SetActive(false);
+
+        Debug.Log("Trust Meter direset. Game siap dimulai.");
+        UpdateUI();
     }
 
     void UpdateUI()

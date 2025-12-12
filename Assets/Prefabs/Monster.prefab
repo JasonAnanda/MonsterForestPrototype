@@ -336,7 +336,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   uiParent: {fileID: 5627315587636389438}
   iconPrefab: {fileID: 1046375225565070766, guid: df5f7757855041a48a0c026bfdc73c3d, type: 3}
-  spriteA: {fileID: 21300000, guid: 7c87d88759333ec42a6810ad0f4f6987, type: 3}
+  spriteA: {fileID: 21300000, guid: e8d482a02a2f2074c8a2ccf77eeb81ab, type: 3}
   spriteEmpty: {fileID: 21300000, guid: 3dc06a8ddb248d24c964d4617c4ba7cd, type: 3}
   moveSpeed: 1
   moveDirection: {x: -1, y: 0, z: 0}
@@ -358,7 +358,7 @@ MonoBehaviour:
   baseAlpha: 0.15
   flashAlpha: 1
   fadeDuration: 0.15
-  waitingForBeat: 0
+  isQuantizing: 0
 --- !u!114 &3291510834635108265
 MonoBehaviour:
   m_ObjectHideFlags: 0
