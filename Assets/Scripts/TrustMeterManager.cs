@@ -33,20 +33,25 @@ public class TrustMeterManager : MonoBehaviour
     // Dipanggil dari MonsterSequence saat input benar (Hit berhasil)
     public void AddHit(bool isPerfect)
     {
-        // Pada sistem Miss Counter sederhana, hit berhasil mereset hitungan Miss
-        // (Anda bisa mengabaikan 'isPerfect' jika tidak ingin membedakan skor, 
-        // tapi logikanya tetap reset Miss)
-        currentMiss = 0;
+        // FIX BUG 1: Meter tidak boleh reset ke 0 pada setiap hit.
+        // Hit berhasil mengurangi akumulasi Miss / kerusakan sebanyak 1.
+        if (currentMiss > 0)
+        {
+            currentMiss--;
+        }
+
+        Debug.Log($"Hit berhasil. Miss Counter berkurang: {currentMiss}/{maxMiss}");
         UpdateUI();
     }
 
-    // Dipanggil dari MonsterSequence saat input salah, early press, atau monster melewati Death Line
+    // Dipanggil dari MonsterSequence saat input salah, early press, miss timing, atau monster melewati Death Line
     public void AddMiss()
     {
         // Pastikan game belum berakhir
         if (currentMiss >= maxMiss) return;
 
         currentMiss++;
+        Debug.Log($"Miss terdeteksi. Miss Counter bertambah: {currentMiss}/{maxMiss}");
         UpdateUI();
 
         if (currentMiss >= maxMiss)

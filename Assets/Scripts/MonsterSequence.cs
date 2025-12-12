@@ -64,6 +64,7 @@ public class MonsterSequence : MonoBehaviour
     private bool hasCued = false; // Melacak apakah suara Cue sudah dimainkan
 
     // Index untuk melacak beat saat fase prompting/echo monster
+    // Catatan: Ini berjalan pada kecepatan 240 BPM, dari 0 hingga 6 (total 7 langkah)
     private int currentBeatIndex = 0;
     // Flag untuk memisahkan giliran monster (prompt) dan giliran player (input)
     private bool isPromptingPhase = true;
@@ -284,7 +285,8 @@ public class MonsterSequence : MonoBehaviour
             if (clipToPlay != null)
             {
                 audioSource.PlayOneShot(clipToPlay);
-                Debug.Log($"Monster plays Pattern {patternID} audio clip on 120 BPM pulse.");
+                Debug.Log($"Monster plays Pattern {patternID} audio clip (Durasi {clipToPlay.length:F2}s) tepat pada Main Pulse (120 BPM).");
+                Debug.LogWarning("Jika audio pola terasa terlalu cepat, pastikan klip audio tersebut dirancang dengan durasi 6 ketukan pada 240 BPM (yaitu 1.5 detik total).");
             }
             else
             {
@@ -326,64 +328,57 @@ public class MonsterSequence : MonoBehaviour
         if (!isTarget || !isActive) return;
         if (BeatManager.Instance == null) return;
 
+        // Cek apakah ini Main Pulse (120 BPM)
+        bool isMainPulse = rhythmType == (int)BeatManager.Instance.mainBPM;
+
         // 1. Quantization: TUNGGU Main Pulse (120 BPM) untuk memulai urutan
         if (isQuantizing)
         {
-            // Pengecekan Kuantisasi: Pastikan kita HANYA bereaksi terhadap Main Pulse (120 BPM).
-            if (rhythmType == (int)BeatManager.Instance.mainBPM)
+            if (isMainPulse)
             {
-                // Main Pulse (120 BPM) Terdeteksi!
                 isQuantizing = false; // Kuantisasi Selesai
-                PlayPatternAudio();   // <--- MONSTER SOUND DIPUTAR TEPAT PADA 120 BPM PULSE.
-                                      // **TIDAK ADA RETURN DI SINI.** Eksekusi dilanjutkan ke logika prompting di bawah
-                                      // untuk menjalankan langkah visual pertama secara sinkron.
+                PlayPatternAudio();   // MONSTER SOUND DIPUTAR TEPAT PADA 120 BPM PULSE PERTAMA.
+                // Eksekusi dilanjutkan ke logika prompting di bawah untuk menjalankan langkah visual pertama (Beat 0)
             }
             else
             {
-                // Ini adalah beat 240 BPM yang bukan pulsa utama (120 BPM). Lewati.
-                return;
+                return; // Lewati beat 240 BPM yang bukan pulsa utama.
             }
         }
 
-        // --- PHASE 1: MONSTER PROMPT / ECHO (6 Beats Visual + Cue on Beat 6) ---
-        // Logika visual ini hanya berjalan pada System Beat (240 BPM) setelah kuantisasi selesai,
-        // termasuk langkah pertama yang baru saja disinkronkan dengan audio di atas.
+        // --- PHASE 1: MONSTER PROMPT / ECHO (6 Beats Visual + 1 Beat Cue) ---
         if (isPromptingPhase)
         {
-            // Beat 1 hingga 5 (Indeks 0-4) - Hanya Flash Visual
-            if (currentBeatIndex < sequence.Count - 1)
+            // Beat 0 hingga 5 (Indeks 0-5) - Visual Flash. (sequence.Count = 6)
+            if (currentBeatIndex < sequence.Count)
             {
                 // A. Visual Prompt (Flash) 
                 FlashHighlight();
 
                 // B. Advance index
                 currentBeatIndex++;
-
                 return;
             }
-            // Beat 6 (Indeks 5) - Flash Visual TERAKHIR dan Play CUE SOUND
-            else if (currentBeatIndex == sequence.Count - 1)
-            {
-                // A. Visual Prompt (Flash) untuk beat ke-6
-                FlashHighlight();
 
-                // B. Play Cue Sound "GO!" BERSAMAAN dengan beat terakhir
+            // Beat 6 (currentBeatIndex == 6) - Play CUE SOUND dan Transisi
+            // **Ini adalah perbaikan bug overlap. Cue diputar 1 beat setelah pattern visual selesai.**
+            else if (currentBeatIndex == sequence.Count)
+            {
+                // A. Play Cue Sound "GO!" 
                 if (cueSoundClip != null && soundPlayer != null && !hasCued)
                 {
                     soundPlayer.PlayCustomSound(cueSoundClip);
                     hasCued = true;
+                    Debug.Log($"Cue Sound diputar pada Beat ke-{currentBeatIndex + 1} (1 beat setelah pattern selesai).");
                 }
 
-                // C. Advance index
-                currentBeatIndex++; // currentBeatIndex sekarang menjadi 6
-
-                // D. Transisi ke fase Player Input
+                // B. Transisi ke fase Player Input
                 isPromptingPhase = false;
 
-                // E. Beat selesai. Player input dimulai pada beat berikutnya (Beat 7).
+                // C. Beat selesai. Player input dimulai pada beat berikutnya (Beat 7).
                 return;
             }
-            // currentBeatIndex > sequence.Count - 1 (i.e., 6 atau lebih)
+            // currentBeatIndex > sequence.Count (i.e., 7 atau lebih)
             else
             {
                 // Transisi sudah selesai, do nothing.
@@ -392,22 +387,28 @@ public class MonsterSequence : MonoBehaviour
         }
 
         // --- PHASE 2: PLAYER INPUT (Auto-consume Pause '・' only) ---
-        // Logika ini berjalan setelah Cue dimainkan.
-        if (!isPromptingPhase && hasCued && sequence.Count > 0 && sequence[0] == "・")
+        // Logika ini berjalan setelah Cue dimainkan (isPromptingPhase == false).
+        if (!isPromptingPhase && hasCued && sequence.Count > 0)
         {
-            // Hapus command PAUSE ('・')
-            if (icons.Count > 0)
+            // Kita hanya mengonsumsi '・' jika command berikutnya adalah '・'
+            if (sequence[0] == "・")
             {
-                Destroy(icons[0]);
-                icons.RemoveAt(0);
-            }
-            sequence.RemoveAt(0);
+                // Hapus command PAUSE ('・')
+                if (icons.Count > 0)
+                {
+                    Destroy(icons[0]);
+                    icons.RemoveAt(0);
+                }
+                sequence.RemoveAt(0);
 
-            if (sequence.Count == 0)
-            {
-                OnSequenceComplete();
-                return;
+                if (sequence.Count == 0)
+                {
+                    OnSequenceComplete();
+                    return;
+                }
             }
+
+            // JIKA command adalah 'A', itu tetap di depan dan menunggu input pemain.
         }
     }
 
@@ -472,7 +473,7 @@ public class MonsterSequence : MonoBehaviour
 
             FlashHighlight(); // Beri feedback visual
 
-            // Play generic Hit Feedback sound 
+            // Play generic Hit Feedback sound 
             if (soundPlayer != null && hitFeedbackClip != null) // Menggunakan hitFeedbackClip yang baru
                 soundPlayer.PlayCustomSound(hitFeedbackClip);
             else if (soundPlayer != null && spawnClip != null) // Fallback ke spawnClip jika hitFeedbackClip kosong
